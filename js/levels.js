@@ -12,8 +12,8 @@
 function S(len, walls, w) { return { t: 'S', len, walls, w }; }
 function C(angle, radius, walls, w) { return { t: 'C', angle, radius, walls, w }; }
 function F(drop, len) { return { t: 'F', len: len || Math.max(1.8, drop * 1.25), drop, walls: 'both' }; }
-// J: 점프대 (경사로 2.0 → 끊어진 물길 1.8). 속도를 내서 날아가야 건너감
-function J() { return { t: 'J', len: 3.8, ramp: 2.0, gap: 1.8, h: 0.7, walls: 'both' }; }
+// J: 점프대 (경사로 2.0 → 끊어진 물길 3.0). 속도를 내서 날아가야 건너감
+function J() { return { t: 'J', len: 5.0, ramp: 2.0, gap: 3.0, h: 0.7, walls: 'both' }; }
 
 let LEVELS = [
   {
@@ -151,11 +151,11 @@ function courseOverlaps(def, checkPond = true) {
     const falls = Math.floor((n - 1) / 5);       // 6~10:1, 11~15:2, ... 36~40:7
     const fallAfter = [];
     for (let j = 1; j <= falls; j++) fallAfter.push(Math.round(n * j / (falls + 1)));
-    // 큰 폭포: 레벨 11부터 1개, 36부터 2개. 호수(수면) 위로 3 이상 남도록 낙차를 맞춤
-    const lakeY = -1.3 - Math.floor((n - 1) / 5) * 4;   // game.js 의 lakeYFor 와 같은 식
+    // 큰 폭포: 레벨 11부터 1개, 36부터 2개. 호수(수면) 위로 1.5 이상 남도록 낙차를 맞춤
+    const lakeY = -1.3 - Math.floor((n - 1) / 5) * 2;   // game.js 의 lakeYFor 와 같은 식
     const bigN = n < 11 ? 0 : n < 36 ? 1 : 2;
     const bigAt = bigN === 1 ? [Math.floor(falls / 2)] : bigN === 2 ? [Math.floor(falls / 3), Math.floor(falls * 2 / 3)] : [];
-    const budget = -lakeY - 3 - (falls - bigN) * 1.2;
+    const budget = -lakeY - 1.5 - (falls - bigN) * 1.2;
     const bigDrop = bigN ? Math.min(budget / bigN, 3.5 + 3 * Math.min(1, (n - 11) / 40) + rng() * 0.8) : 0;
     // 커브 중간 난간 끊김: 레벨 8부터, 높을수록 자주
     const pGap = n < 8 ? 0 : 0.22 + 0.38 * Math.min(1, (n - 8) / 40);

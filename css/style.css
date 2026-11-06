@@ -265,3 +265,7 @@ h1 {
 .wd-pop-card { width: 100%; background: #fffaf0; border-radius: 20px; padding: 12px 10px 8px; box-shadow: 0 6px 0 #e8dcc6, 0 10px 30px rgba(0, 0, 0, .18); animation: pop .25s both cubic-bezier(.2, 1.6, .4, 1); }
 .wd-pop-card h3 { margin: 0 0 10px; font-weight: normal; font-size: 20px; }
 .wd-pop-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+
+/* 마지막 레벨: 화면이 도는 동안 아래쪽에 뜨는 결과 보기 버튼 */
+.final-result { position: absolute; left: 0; right: 0; width: max-content; bottom: 9cqh; z-index: 20; animation: pop .4s both cubic-bezier(.2, 1.6, .4, 1); }
+.final-result.hidden { display: none; }

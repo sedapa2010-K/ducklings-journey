@@ -16,7 +16,7 @@ const INPUT_ACC = 7.5;    // 기울기/조이스틱 최대 가속도
 const WALL_REST = 0.45;   // 벽 반발 계수
 const GRAVITY = 20;
 // 물길 높이: 5레벨마다 한 단계씩 높아짐 (호수가 그만큼 더 아래에 있음)
-const lakeYFor = n => -1.3 - Math.floor((n - 1) / 5) * 4;   // 1~5: 수면 바로 위(-1.3), 6~10: -5.3, ... 56~60: -45.3
+const lakeYFor = n => -1.3 - Math.floor((n - 1) / 5) * 2;   // 1~5: 수면 바로 위(-1.3), 6~10: -3.3, ... 56~60: -23.3 (5레벨마다 2씩 높아짐)
 let LAKE_Y = -6;          // 현재 레벨의 호수 높이
 const FALL_BOOST = 14;    // 폭포 경사에서 받는 앞쪽 가속
 const SHIELD_TIME = 5;    // 방패 아이템: 양쪽 벽이 세워지는 시간(초)
@@ -646,28 +646,17 @@ function buildLevelWorld(def) {
   const finalLevel = levelNo === LEVELS.length;
   let homeAt = null;
   if (finalLevel) {
-    const hx = pondC.x + Math.cos(momA) * (PR + 1.5), hz = pondC.z + Math.sin(momA) * (PR + 1.5);
-    const home = makeHome(); home.position.set(hx, EY, hz);
+    const HOME_R = PR + 1.25;  // 집 가운데 (1.4배 크기, 앞면이 연못가에 닿음)
+    const hx = pondC.x + Math.cos(momA) * HOME_R, hz = pondC.z + Math.sin(momA) * HOME_R;
+    const home = makeHome(); home.scale.setScalar(1.4); home.position.set(hx, EY, hz);
     home.rotation.y = Math.atan2(pondC.x - hx, pondC.z - hz);   // 문이 연못을 바라봄
     group.add(home); homeAt = { x: hx, z: hz };
-    if (lookUnlocked(LOOKS.find(l => l.id === 'home'))) {   // 🏡 별을 전부 모으면: 꽃 아치·꽃밭·작은 나무로 꾸며진 특별 보금자리
-      const arch = new THREE.Group();
-      const cols = [0xff9fb6, 0xffffff, 0xffd84d, 0xc7a8ff, 0x8fdcc0];
-      for (let k = 0; k <= 12; k++) {
-        const a = Math.PI * k / 12;
-        const f = new THREE.Mesh(sphLow, toon(cols[k % cols.length])); f.scale.setScalar(0.13);
-        f.position.set(Math.cos(a) * 0.75, 0.15 + Math.sin(a) * 1.05, 1.0); arch.add(f);
-      }
-      arch.position.set(hx, EY, hz); arch.rotation.y = home.rotation.y; group.add(arch);
-      for (let k = 0; k < 26; k++) {
-        const a = momA + (k / 26 - 0.5) * 2.6, r = PR + 0.7 + (k % 3) * 0.55;
-        const f = new THREE.Mesh(sphLow, toon(cols[k % cols.length])); f.scale.setScalar(0.12);
-        f.position.set(pondC.x + Math.cos(a) * r, EY + 0.1, pondC.z + Math.sin(a) * r); group.add(f);
-      }
-      for (const da of [-0.9, 0.9]) add(makeTree(pondC.x + Math.cos(momA + da) * (PR + 2.2), EY, pondC.z + Math.sin(momA + da) * (PR + 2.2), 0.8));
+    if (lookUnlocked(LOOKS.find(l => l.id === 'home'))) {   // 🏡 별을 전부 모으면: 동화 같은 특별 보금자리
+      decorateDreamHome(group, home, pondC, PR, EY, momA, add);
     }
     for (let i = 0; i < 9; i++) {                                // 부들(갈대) 무리
       const a = momA + (i - 4) * 0.42 + (i % 2) * 0.1;
+      if (Math.abs(i - 4) <= 1) continue;                        // 집 문 앞은 비워 둠
       if (Math.abs(Math.atan2(Math.sin(a - inAng), Math.cos(a - inAng))) < 0.9) continue;
       add(makeReeds(pondC.x + Math.cos(a) * (PR + 0.35), EY, pondC.z + Math.sin(a) * (PR + 0.35), i));
     }
@@ -696,7 +685,7 @@ function buildLevelWorld(def) {
     f.duck.rotation.y = Math.atan2(-dx, -dz);
   }
   const arrive = finalLevel
-    ? { x: pondC.x + Math.cos(momA) * (PR - 1.1), z: pondC.z + Math.sin(momA) * (PR - 1.1) }   // 내 집 문 앞
+    ? { x: pondC.x, z: pondC.z }   // 마지막: 호수(연못) 한가운데
     : { x: pondC.x + Math.cos(momA) * 0.4, z: pondC.z + Math.sin(momA) * 0.4 };
 
   // 타임어택 제한 시간: 코스 길이 ÷ 유속 × 배수 + 2초
@@ -789,28 +778,50 @@ function buildLevelWorld(def) {
     }
     return out;
   }
-  const nLogs = levelNo < 7 ? 0 : Math.min(8, 1 + Math.floor((levelNo - 7) / 5));       // 7:1, 12:2 ... 42~: 8
+  const nLogs = levelNo < 7 ? 0 : Math.min(6, 1 + Math.floor((levelNo - 7) / 6));       // 통나무 묶음 수: 7:1, 13:2 ... 37~: 6
   const nWhirls = levelNo < 13 ? 0 : Math.min(5, 1 + Math.floor((levelNo - 13) / 8));   // 13:1, 21:2 ... 45~: 5
   const nCrabs = levelNo < 30 ? 0 : Math.min(5, 1 + Math.floor((levelNo - 30) / 6));    // 30:1, 36:2 ... 54~: 5
   const logs = [], whirls = [], crabs = [];
-  // 통나무: 한쪽 벽에서 가운데 근처까지 막음. 피해서 지나가는 쪽에는 난간이 있는 곳에만 (피하다 바로 추락하지 않게)
-  for (const i of pickSpots(nLogs, 20, i => walledAt(i, 1) || walledAt(i, -1))) {
-    const sm = samples[i];
-    const passL = walledAt(i, 1), passR = walledAt(i, -1);
-    const side = passL && passR ? (rng() < 0.5 ? 1 : -1) : passL ? -1 : 1;   // 통나무는 지나가는 쪽의 반대편
-    const a = side * sm.w, b = side * sm.w * 0.08, L = Math.abs(a - b), mid = (a + b) / 2;
-    const g = new THREE.Group();
-    g.position.set(sm.x + sm.nx * mid, sm.y + 0.12, sm.z + sm.nz * mid);
-    g.rotation.y = Math.atan2(-sm.tx, -sm.tz);
-    const log = addOutlined(g, new THREE.CylinderGeometry(1, 1, 1, 14), toon(0x9b6a3c), V(0, 0, 0), V(0.3, L, 0.3));
-    log.rotation.z = Math.PI / 2;
-    for (const e of [-1, 1]) {
-      const cap = new THREE.Mesh(new THREE.CircleGeometry(0.27, 14), toon(0xe8c38e, { side: THREE.DoubleSide }));
-      cap.position.x = e * (L / 2 + 0.002); cap.rotation.y = Math.PI / 2; g.add(cap);
+  // 통나무: 2~3개를 번갈아 좌우에 놓아 지그재그로 피해 가게. 양쪽 난간이 있는 직선에만 (피하다 바로 추락하지 않게)
+  const LOG_GAP = levelNo < 30 ? 15 : 13;                  // 통나무 사이 간격 (샘플 수, 0.25 씩 → 약 3.3~3.8)
+  // 통나무가 막는 쪽 = side, 지나가는 쪽(-side)에는 난간이 있어야 함 (피하다 바로 추락하지 않게)
+  const logOk = (k, side) => { const sm = samples[k]; return sm && !sm.fall && !sm.ramp && !sm.gap && walledAt(k, -side); };
+  const logPlan = new Map();                               // 자리 → [통나무 수, 첫 통나무 쪽]
+  const logRun = i => {
+    const tries = levelNo < 25 ? [2] : rng() < 0.6 ? [3, 2] : [2, 3];   // 레벨 25부터 3개 묶음도 (안 되면 2개)
+    for (const cnt of tries) {
+      if (i + LOG_GAP * (cnt - 1) >= N - 40) continue;
+      const a = samples[i], b = samples[i + LOG_GAP * (cnt - 1)];
+      if (a.tx * b.tx + a.tz * b.tz < 0.6) continue;      // 너무 급하게 꺾이는 곳은 피함
+      for (const first of rng() < 0.5 ? [1, -1] : [-1, 1]) {
+        let ok = true;
+        for (let j = 0, sd = first; j < cnt && ok; j++, sd = -sd) ok = logOk(i + j * LOG_GAP, sd);
+        if (ok) { logPlan.set(i, [cnt, first]); return true; }
+      }
     }
-    const leaf = new THREE.Mesh(sphLow, toon(0x7fd17a)); leaf.scale.set(0.18, 0.05, 0.11); leaf.position.set(L * 0.2, 0.3, 0); g.add(leaf);
-    group.add(g);
-    logs.push({ g, ax: sm.x + sm.nx * a, az: sm.z + sm.nz * a, bx: sm.x + sm.nx * b, bz: sm.z + sm.nz * b, y: sm.y, idx: i, side, phase: rng() * 6 });
+    return false;
+  };
+  let logCount = 0;
+  for (const i of pickSpots(nLogs, 20, logRun, () => true)) {
+    let [cnt, side] = logPlan.get(i);
+    for (let j = 0; j < cnt; j++, side = -side) {
+      const li = i + j * LOG_GAP, sm = samples[li];
+      if (j) busy.push(li);
+      const a = side * sm.w, b = side * sm.w * 0.08, L = Math.abs(a - b), mid = (a + b) / 2;
+      const g = new THREE.Group();
+      g.position.set(sm.x + sm.nx * mid, sm.y + 0.12, sm.z + sm.nz * mid);
+      g.rotation.y = Math.atan2(-sm.tx, -sm.tz);
+      const log = addOutlined(g, new THREE.CylinderGeometry(1, 1, 1, 14), toon(0x9b6a3c), V(0, 0, 0), V(0.3, L, 0.3));
+      log.rotation.z = Math.PI / 2;
+      for (const e of [-1, 1]) {
+        const cap = new THREE.Mesh(new THREE.CircleGeometry(0.27, 14), toon(0xe8c38e, { side: THREE.DoubleSide }));
+        cap.position.x = e * (L / 2 + 0.002); cap.rotation.y = Math.PI / 2; g.add(cap);
+      }
+      const leaf = new THREE.Mesh(sphLow, toon(0x7fd17a)); leaf.scale.set(0.18, 0.05, 0.11); leaf.position.set(L * 0.2, 0.3, 0); g.add(leaf);
+      group.add(g);
+      logs.push({ g, ax: sm.x + sm.nx * a, az: sm.z + sm.nz * a, bx: sm.x + sm.nx * b, bz: sm.z + sm.nz * b, y: sm.y, idx: li, side, phase: rng() * 6 });
+      logCount++;
+    }
   }
   for (const i of pickSpots(nWhirls, 24, i => walledAt(i))) {   // 소용돌이: 양쪽 난간 있는 직선에만 (시간 손해용)
     // 한쪽으로 치우치게 놓아서 반대쪽으로 비켜 갈 수 있게 (가운데를 다 막지 않음)
@@ -824,7 +835,7 @@ function buildLevelWorld(def) {
     const sm = samples[i], c = makeCrab();
     c.rotation.y = Math.atan2(sm.tx, sm.tz);               // 다가오는 오리를 바라봄
     group.add(c);
-    crabs.push({ g: c, s: sm, amp: sm.w - 0.5, speed: 0.9 + rng() * 0.6, phase: rng() * 6, x: sm.x, y: sm.y, z: sm.z, lat: 0, idx: i, hitT: -9 });
+    crabs.push({ g: c, s: sm, amp: sm.w - 0.5, speed: 1.6 + rng() * 0.8, phase: rng() * 6, x: sm.x, y: sm.y, z: sm.z, lat: 0, idx: i, hitT: -9 });
   }
   // 물레방아(레벨 20~): 커다란 나무 바퀴가 물길을 가로질러 돌고, 날개가 물에 잠길 때 지나가면 튕겨 나감
   const nMills = levelNo < 20 ? 0 : Math.min(4, 1 + Math.floor((levelNo - 20) / 10));   // 20:1, 30:2, 40:3, 50~: 4
@@ -855,7 +866,7 @@ function buildLevelWorld(def) {
     group.add(g);
     mills.push({ g, wheel, s: sm, x: sm.x, y: sm.y, z: sm.z, R, H, w: sm.w, omega: 1.0 + rng() * 0.3, phase: rng() * 6, theta: 0, idx: i, hitT: -9 });
   }
-  limit += Math.ceil(nLogs * 1.5 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
+  limit += Math.ceil(logCount * 1.2 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
   limit = Math.ceil(limit * 0.85);   // 모든 레벨 제한 시간 15% 줄임
 
   // 🌙 밤: 호수 위에 반짝이는 별빛 (반사)
@@ -870,10 +881,133 @@ function buildLevelWorld(def) {
     group.add(lakeStars);
   }
 
-  return { theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y };
+  // ⏰ 시계 아이템(레벨 21~): 코스 80% 쯤에 놓여 있고 먹으면 제한 시간이 늘어남 (21~34: +5초, 35~49: +7초, 50~: +10초)
+  let clock = null;
+  if (levelNo >= 21) {
+    const bonus = levelNo >= 50 ? 10 : levelNo >= 35 ? 7 : 5;
+    const taken = [...logs, ...whirls, ...crabs, ...mills].map(o => o.idx);
+    let i = Math.round(N * 0.8);
+    while (i < N - 40 && (samples[i].fall || samples[i].ramp || samples[i].gap || samples[i - 4].fall || taken.some(k => Math.abs(k - i) < 14))) i += 3;
+    if (i < N - 40) {
+      const sm = samples[i], g = new THREE.Group();
+      const face = new THREE.Group(); face.position.y = 0.8; g.add(face);
+      addOutlined(face, new THREE.CylinderGeometry(1, 1, 1, 24), toon(0xfffdf5), V(0, 0, 0), V(0.36, 0.1, 0.36), true, 0.03).rotation.x = Math.PI / 2;   // 시계 판
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.37, 0.06, 8, 28), toon(0xff5a5f)); face.add(rim);                                        // 빨간 테
+      for (const sx of [-1, 1]) addOutlined(face, sphLow, toon(0xff5a5f), V(sx * 0.24, 0.33, 0), V(0.11, 0.09, 0.09), true, 0.025);           // 위쪽 종 두 개
+      const handM = new THREE.MeshBasicMaterial({ color: 0x3b2a1e });
+      const hH = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.17, 0.02), handM); hH.position.set(0, 0.07, 0.065); face.add(hH);
+      const hM = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.25, 0.02), handM); hM.geometry.translate(0, 0.11, 0); hM.position.set(0, 0, 0.07); face.add(hM);
+      const dot = new THREE.Mesh(sphLow, handM); dot.scale.setScalar(0.04); dot.position.z = 0.07; face.add(dot);
+      for (const sz of [1, -1]) { const back = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), toon(0xfffdf5)); back.position.z = sz * 0.052; if (sz < 0) back.rotation.y = Math.PI; face.add(back); }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffd43b }));
+      ring.rotation.x = Math.PI / 2; ring.position.y = 0.12; g.add(ring);
+      g.position.set(sm.x, sm.y, sm.z); group.add(g);
+      clock = { g, face, hand: hM, ring, x: sm.x, y: sm.y, z: sm.z, idx: i, bonus, taken: false };
+    }
+  }
+  return { theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock };
 }
 
 // 다 자란 오리의 새 보금자리: 작은 나무 오리 집
+// 꽃 한 송이 (꽃잎 5장 + 노란 가운데 + 줄기)
+function makeFlower(col, s = 1) {
+  const g = new THREE.Group();
+  const stem = new THREE.Mesh(decoGeo.cyl, toon(0x5fae4e)); stem.scale.set(0.018, 0.22, 0.018); stem.position.y = 0.11; g.add(stem);
+  const head = new THREE.Group(); head.position.y = 0.23; g.add(head);
+  for (let k = 0; k < 5; k++) {
+    const a = k / 5 * Math.PI * 2, p = new THREE.Mesh(sphLow, toon(col));
+    p.scale.set(0.065, 0.022, 0.045); p.position.set(Math.cos(a) * 0.06, 0, Math.sin(a) * 0.06); p.rotation.y = -a; head.add(p);
+  }
+  const c = new THREE.Mesh(sphLow, toon(0xffc93c)); c.scale.setScalar(0.035); c.position.y = 0.012; head.add(c);
+  g.scale.setScalar(s);
+  return g;
+}
+// 튤립 (줄기 + 잎 + 컵 모양 꽃)
+function makeTulip(col, s = 1) {
+  const g = new THREE.Group();
+  const stem = new THREE.Mesh(decoGeo.cyl, toon(0x5fae4e)); stem.scale.set(0.02, 0.3, 0.02); stem.position.y = 0.15; g.add(stem);
+  const leaf = new THREE.Mesh(sphLow, toon(0x6cc46d)); leaf.scale.set(0.03, 0.13, 0.06); leaf.position.set(0.035, 0.1, 0); leaf.rotation.z = -0.4; g.add(leaf);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.045, 0.13, 7), toon(col)); cup.position.y = 0.34; g.add(cup);
+  for (let k = 0; k < 3; k++) { const tip = new THREE.Mesh(decoGeo.cone, toon(col)); tip.scale.set(0.035, 0.06, 0.035); tip.position.set(Math.cos(k * 2.1) * 0.045, 0.42, Math.sin(k * 2.1) * 0.045); g.add(tip); }
+  g.scale.setScalar(s);
+  return g;
+}
+// 🏡 별 180개 보상: 흰 울타리 · 튤립 꽃밭 · 꽃 넝쿨 아치 · 반짝이 전구 · 가랜드 · 랜턴 · 우체통 · 풍선 · 연못가 꽃
+function decorateDreamHome(group, home, c, PR, EY, momA, add) {
+  const pol = (da, r, y = 0) => V(c.x + Math.cos(momA + da) * r, EY + y, c.z + Math.sin(momA + da) * r);
+  const put = (m, da, r, y = 0) => { m.position.copy(pol(da, r, y)); m.rotation.y = Math.atan2(c.x - m.position.x, c.z - m.position.z); group.add(m); return m; };
+  const pastel = [0xff8fb1, 0xffffff, 0xffd84d, 0xc7a8ff, 0xff9f6b, 0x8fdcc0];
+  const bulbs = [0xfff1a8, 0xffb3c7, 0xb5e8ff, 0xd7c2ff, 0xffd59e].map(cl => new THREE.MeshBasicMaterial({ color: cl }));
+  // 집: 창문에 따뜻한 불 + 문 앞을 비추는 작은 불빛
+  if (home.userData.win) home.userData.win.material = new THREE.MeshBasicMaterial({ color: 0xffe28a });
+  const lamp = new THREE.PointLight(0xffc874, 1.1, 10, 1.6); lamp.position.copy(pol(0, PR + 0.2, 2.0)); group.add(lamp);
+  // 흰 나무 울타리 (집 뒤쪽을 감싸는 반원) + 기둥마다 반짝이 전구
+  const R = PR + 3.0, white = toon(0xfffaf0);
+  for (let da = -0.78; da <= 0.781; da += 0.09) {
+    const post = put(new THREE.Mesh(decoGeo.cyl7, white), da, R, 0.32); post.scale.set(0.055, 0.64, 0.055);
+    const tip = put(new THREE.Mesh(decoGeo.cone, white), da, R, 0.7); tip.scale.set(0.07, 0.12, 0.07);
+    if (da < 0.77) {
+      const a = pol(da, R), b = pol(da + 0.09, R), mid = a.clone().add(b).multiplyScalar(0.5), len = a.distanceTo(b);
+      for (const y of [0.2, 0.48]) {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, 0.03), white);
+        rail.position.set(mid.x, EY + y, mid.z); rail.rotation.y = Math.atan2(-(b.z - a.z), b.x - a.x); group.add(rail);
+      }
+    }
+    const bulb = new THREE.Mesh(sphLow, bulbs[Math.round((da + 1) * 11) % bulbs.length]); bulb.scale.setScalar(0.06); bulb.position.copy(pol(da, R, 0.82)); group.add(bulb);
+  }
+  // 튤립 꽃밭: 집 양옆, 울타리 안쪽에 세 줄
+  const tulipCols = [0xff5d7a, 0xff9fb6, 0xffd84d, 0xffffff, 0xb28dff];
+  let n = 0;
+  for (const side of [-1, 1]) for (let row = 0; row < 3; row++) for (let k = 0; k < 7; k++) {
+    const da = side * (0.27 + k * 0.065 + (row % 2) * 0.03), r = R - 0.4 - row * 0.32;
+    put(makeTulip(tulipCols[(n++) % tulipCols.length], 1.15 + ((k + row) % 3) * 0.12), da, r);
+  }
+  // 연못 쪽 양옆 랜턴 기둥 + 둘 사이에 알록달록 가랜드(삼각 깃발)
+  const poles = [];
+  for (const sx of [-1, 1]) {
+    const da = sx * 0.62, r = PR + 0.6;   // 집(1.4배) 높이에 맞춘 랜턴 기둥. 가랜드 줄이 집 앞(연못 위)으로 지나가게 양옆으로 넓게
+    const pole = put(new THREE.Mesh(decoGeo.cyl, toon(0x8a5a35)), da, r, 1.26); pole.scale.set(0.065, 2.52, 0.065);
+    put(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.3, 0.26), new THREE.MeshBasicMaterial({ color: 0xffe9a8 })), da, r, 2.66);
+    const cap = put(new THREE.Mesh(decoGeo.cone, toon(0x6b4a2e)), da, r, 2.88); cap.scale.set(0.24, 0.19, 0.24);
+    poles.push(pol(da, r, 2.4));
+  }
+  const flagCols = [0xff6b8b, 0xffd84d, 0x74c0fc, 0x8ce99a, 0xc7a8ff];
+  const lineAng = Math.atan2(poles[1].x - poles[0].x, poles[1].z - poles[0].z);
+  for (let k = 0; k <= 10; k++) {
+    const u = k / 10, p = poles[0].clone().lerp(poles[1], u); p.y -= Math.sin(u * Math.PI) * 0.45;   // 아래로 살짝 처진 줄
+    if (k < 10) {
+      const q = poles[0].clone().lerp(poles[1], u + 0.05); q.y -= Math.sin((u + 0.05) * Math.PI) * 0.45;
+      const fl = new THREE.Mesh(decoGeo.cone, toon(flagCols[k % flagCols.length], { side: THREE.DoubleSide }));
+      fl.scale.set(0.16, 0.29, 0.025); fl.rotation.set(Math.PI, lineAng + Math.PI / 2, 0);
+      fl.position.set(q.x, q.y - 0.16, q.z); group.add(fl);
+    }
+    const bb = new THREE.Mesh(sphLow, bulbs[k % bulbs.length]); bb.scale.setScalar(0.055); bb.position.copy(p); group.add(bb);
+  }
+  // 우체통 (빨간 우편함 + 노란 깃발)
+  const mail = new THREE.Group();
+  const mp = new THREE.Mesh(decoGeo.cyl, toon(0x8a5a35)); mp.scale.set(0.04, 0.6, 0.04); mp.position.y = 0.3; mail.add(mp);
+  addOutlined(mail, new THREE.BoxGeometry(1, 1, 1), toon(0xff5a5f), V(0, 0.68, 0), V(0.22, 0.18, 0.32), true, 0.03);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.12, 0.08), toon(0xffd84d)); flag.position.set(0.13, 0.78, 0.05); mail.add(flag);
+  put(mail, 0.85, PR + 0.9);
+  // 풍선 세 개 (집 옆 울타리에 묶임)
+  const balloons = new THREE.Group();
+  [[0xff6b8b, -0.18, 1.55], [0x74c0fc, 0.05, 1.75], [0xffd84d, 0.22, 1.5]].forEach(([cl, x, y]) => {
+    addOutlined(balloons, sph, toon(cl), V(x, y, 0), V(0.17, 0.21, 0.17), true, 0.025);
+    const str = new THREE.Mesh(decoGeo.cyl, new THREE.MeshBasicMaterial({ color: 0xffffff })); str.scale.set(0.006, y - 0.2, 0.006); str.position.set(x / 2, (y - 0.2) / 2 + 0.2, 0); str.rotation.z = -x * 0.4; balloons.add(str);
+  });
+  put(balloons, -0.62, R - 0.05, 0.5);
+  // 연못가를 따라 꽃 (집 쪽 반원)
+  for (let k = 0; k < 30; k++) {
+    const da = (k / 29 - 0.5) * 2.4;
+    if (Math.abs(da) < 0.26) continue;   // 집 자리 비움
+    put(makeFlower(pastel[k % pastel.length], 1.3 + (k % 3) * 0.15), da, PR + 0.45 + (k % 2) * 0.25);
+  }
+  // 집 양옆 분홍 꽃 핀 나무
+  for (const da of [-0.95, 0.95]) {
+    const tr = add(makeTree(c.x + Math.cos(momA + da) * (PR + 2.2), EY, c.z + Math.sin(momA + da) * (PR + 2.2), 0.85));
+    for (let k = 0; k < 6; k++) { const bl = new THREE.Mesh(sphLow, toon(0xffb3c7)); bl.scale.setScalar(0.12); bl.position.set(Math.cos(k) * 0.55, 1.5 + (k % 3) * 0.25, Math.sin(k) * 0.55); tr.add(bl); }
+  }
+}
 function makeHome() {
   const g = new THREE.Group();
   const wood = toon(0xe0aa6a), roofC = toon(0xe8735a), dark = toon(0x6b4a2e);
@@ -883,12 +1017,13 @@ function makeHome() {
     const r = addOutlined(g, new THREE.BoxGeometry(1, 1, 1), roofC, V(sx * 0.48, 1.5, 0), V(1.18, 0.14, 1.75));
     r.rotation.z = -sx * 0.62; r.castShadow = true;
   }
-  const gable = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.95, 0.62, 3, 1), wood);   // 지붕 아래 삼각벽
-  gable.rotation.set(Math.PI / 2, 0, 0); gable.scale.set(1, 1.5, 1); gable.position.set(0, 1.42, 0); g.add(gable);
+  const tri = new THREE.Shape(); tri.moveTo(-0.85, 0); tri.lineTo(0.85, 0); tri.lineTo(0, 0.62); tri.lineTo(-0.85, 0);
+  const gableGeo = new THREE.ExtrudeGeometry(tri, { depth: 1.5, bevelEnabled: false }); gableGeo.translate(0, 0, -0.75);
+  const gable = new THREE.Mesh(gableGeo, wood); gable.position.set(0, 1.2, 0); g.add(gable);   // 지붕 아래 삼각벽 (앞뒤 박공)
   const door = new THREE.Mesh(new THREE.CircleGeometry(0.33, 18), dark);   // 둥근 문 (앞 = +z)
   door.position.set(0, 0.55, 0.756); g.add(door);
   const win = new THREE.Mesh(new THREE.CircleGeometry(0.14, 14), toon(0xfff3b0));
-  win.position.set(0, 1.0, 0.757); g.add(win);
+  win.position.set(0, 1.0, 0.757); g.add(win); g.userData.win = win;
   const ramp = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 1.1), toon(0xc98f5a));      // 물로 내려가는 판자
   ramp.position.set(0, 0.2, 1.25); ramp.rotation.x = 0.36; g.add(ramp);
   const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.4, 0.22), toon(0xc2b294));
@@ -923,12 +1058,13 @@ function makePine(x, y, z, s, snowy) {
   const greens = snowy ? [0x4f8f6a, 0x5a9e76, 0x67ad83] : [0x2f8a4c, 0x3a9c58, 0x4aae66];
   for (let k = 0; k < 3; k++) {
     const c = new THREE.Mesh(decoGeo.cone, toon(greens[k])); c.scale.set(0.85 - k * 0.2, 1.0 - k * 0.15, 0.85 - k * 0.2); c.position.y = 1.0 + k * 0.55; c.castShadow = true; t.add(c);
-    if (snowy) { const sn = new THREE.Mesh(decoGeo.cone, toon(0xffffff)); sn.scale.set(0.42 - k * 0.1, 0.35, 0.42 - k * 0.1); sn.position.y = 1.36 + k * 0.55; t.add(sn); }
+    if (snowy) { const sn = new THREE.Mesh(decoGeo.cone, snowCapMat); sn.scale.set(0.42 - k * 0.1, 0.35, 0.42 - k * 0.1); sn.position.y = 1.36 + k * 0.55; t.add(sn); }
   }
   t.position.set(x, y, z); t.scale.setScalar(s);
   return t;
 }
 const at = (m, x, y, z) => { m.position.set(x, y, z); return m; };
+const snowCapMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradTex, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 function decorateBiome(id, group, samples, rng, add) {
   const N = samples.length;
   // 물길에서 충분히 떨어진 자리만 (r = 장식 반지름)
@@ -970,7 +1106,9 @@ function decorateBiome(id, group, samples, rng, add) {
       const r = 4.5 + rng() * 5.5, p = spot(9, 30, r); if (!p) continue;
       const h = maxTop(p.x, p.z, r, 9 + rng() * 13);
       const m = new THREE.Mesh(decoGeo.cone, toon([0x7f9c7a, 0x8a9a8f, 0x6f8f78][i % 3])); m.scale.set(r, h, r); m.position.set(p.x, W + h / 2, p.z); m.rotation.y = rng() * 3; add(m);
-      const cap = new THREE.Mesh(decoGeo.cone, toon(0xffffff)); cap.scale.set(r * 0.36, h * 0.36, r * 0.36); cap.position.set(p.x, W + h * 0.82, p.z); cap.rotation.y = m.rotation.y; add(cap);
+      m.castShadow = m.receiveShadow = false;   // 큰 산은 그림자 X (오리를 따라 움직이는 그림자 범위 때문에 깜빡임)
+      // 눈 모자: 산 표면과 딱 겹치면 멀리서 깜빡여서(z-fighting) 살짝 더 두껍게 + 앞에 그리도록 오프셋
+      const cap = new THREE.Mesh(decoGeo.cone, snowCapMat); cap.scale.set(r * 0.4, h * 0.37, r * 0.4); cap.position.set(p.x, W + h * 0.82 + h * 0.006, p.z); cap.rotation.y = m.rotation.y; add(cap); cap.castShadow = cap.receiveShadow = false;
     }
     for (let i = 0; i < count(26); i++) { const p = spot(5, 16, 1.2); if (p) add(makePine(p.x, W, p.z, 1.4 + rng() * 0.8, false)); }
   } else if (id === 'canyon') {            // 🏜️ 층층이 붉은 바위 기둥 (메사)
@@ -1357,7 +1495,7 @@ function resetDuck() {
   duck.visible = true; duck.rotation.set(0, P.yaw, 0); duck.position.set(P.x, P.y, P.z);
   snapCamera();
   timeT = 0; celebrateT = 0; shieldT = 0; hearts = MAX_HEARTS; updateHeartsHud();
-  heartItem = null; heartTimer = HEART_CHECK;
+  heartItem = null; heartTimer = HEART_CHECK; heartSpawns = 0;
   trail.length = 0; babyGot = 0; updateBabyHud(); resetStats();
   for (const f of world.family) f.duck.position.y = f.baseY;
 }
@@ -1537,6 +1675,14 @@ function physicsStep(dt) {
       burst(c.x, P.y + 0.4, c.z, 8, 2, 0.08, 0.5);
     }
   }
+  const ck = world.clock;   // ⏰ 시계 줍기 → 제한 시간 늘어남
+  if (ck && !ck.taken && (ck.x - P.x) ** 2 + (ck.z - P.z) ** 2 < 1.0 && Math.abs(ck.y - P.y) < 1) {
+    ck.taken = true; ck.g.visible = false;
+    world.limit += ck.bonus;
+    Sfx.power();
+    burst(ck.x, ck.y + 0.8, ck.z, 16, 2.4, 0.09, 0.7);
+    showToast(t('clockToast', ck.bonus), 1500);
+  }
   for (const it of world.items) {   // 방패 아이템 줍기
     if (!it.taken && (it.x - P.x) ** 2 + (it.z - P.z) ** 2 < 0.95 * 0.95 && Math.abs(it.y - P.y) < 1) takeItem(it);
   }
@@ -1609,8 +1755,10 @@ function missionListHtml(results, savedMask) {
   }).join('') + '</span>';
 }
 
+let winT0 = 0;
+const FINAL_ORBIT = 14;  // 마지막 레벨: 집에 도착하면 이 시간(초)에 한 바퀴씩, 계속 천천히 돌림
 function startWin() {
-  state = 'win'; celebrateT = 0;
+  state = 'win'; celebrateT = 0; winT0 = elapsed;
   Sfx.win(); setTimeout(() => Sfx.quack(1.1), 350);
   const tm = Math.round(timeT * 10) / 10;
   const n = levelIdx + 1;
@@ -1626,7 +1774,9 @@ function startWin() {
   const starsAfter = totalStars();
   const newLooks = LOOKS.filter(l => l.need > starsBefore && l.need <= starsAfter);   // 이번에 새로 열린 꾸미기
   persist();
-  setTimeout(() => {
+  const isLast = levelIdx === LEVELS.length - 1;
+  if (isLast) { $('#hud').classList.add('hidden'); joyZone.classList.add('hidden'); joyReset(); }   // 한 바퀴 도는 동안은 화면만
+  const showResult = () => {
     if (state !== 'win') return;
     const last = levelIdx === LEVELS.length - 1;
     showPopup({
@@ -1643,7 +1793,14 @@ function startWin() {
         ? [[t('levels'), () => openLevels()], [t('playAgain'), () => startLevel(levelIdx), true], [`${t('wardrobe')} ⭐${totalStars()}`, () => { openLevels(); openWardrobe(); }, 'pill-btn wardrobe-btn']]
         : [[t('nextLevel'), () => startLevel(levelIdx + 1)], [t('playAgain'), () => startLevel(levelIdx), true], [t('levels'), () => openLevels(), true], [`${t('wardrobe')} ⭐${totalStars()}`, () => { openLevels(); openWardrobe(); }, 'pill-btn wardrobe-btn']],
     });
-  }, 1700);
+  };
+  if (!isLast) setTimeout(showResult, 1700);
+  else setTimeout(() => {   // 마지막 레벨: 화면은 계속 천천히 돌고, '결과 보기' 버튼을 누르면 결과
+    if (state !== 'win') return;
+    const b = $('#btnFinalResult');
+    b.classList.remove('hidden');
+    b.onclick = () => { Sfx.click(); b.classList.add('hidden'); showResult(); };
+  }, 2500);
 }
 function timeUp() { // 타임어택 실패
   state = 'failed';
@@ -1688,14 +1845,15 @@ function respawn() {
   burst(P.x, P.y + 0.2, P.z, 14, 2, 0.08, 0.5);
   Sfx.quack(1.3);
   state = 'playing';
-  trySpawnHeart(0.5); heartTimer = HEART_CHECK;   // 하트가 3개 이하면 앞쪽에 하트 아이템이 나올 수도
+  trySpawnHeart(0.25); heartTimer = HEART_CHECK;   // 하트가 3개 이하면 앞쪽에 하트 아이템이 나올 수도
 }
 
 // ---------- 하트 아이템: 하트가 3개 이하일 때 랜덤하게 앞쪽에 나타남 (먹으면 +1) ----------
-const HEART_CHECK = 8;          // 몇 초마다 나올지 검사
-let heartItem = null, heartTimer = HEART_CHECK;
+const HEART_CHECK = 16;         // 몇 초마다 나올지 검사
+const HEART_MAX_PER_LEVEL = 2;  // 한 레벨에 최대 몇 번까지 나올지
+let heartItem = null, heartTimer = HEART_CHECK, heartSpawns = 0;
 function trySpawnHeart(chance) {
-  if (!world || heartItem || hearts > 3 || hearts >= MAX_HEARTS || Math.random() > chance) return;
+  if (!world || heartItem || hearts > 3 || hearts >= MAX_HEARTS || heartSpawns >= HEART_MAX_PER_LEVEL || Math.random() > chance) return;
   const S = world.samples, N = S.length;
   let i = P.idx + 40 + Math.floor(Math.random() * 25);   // 10~16 정도 앞
   while (i < N - 20 && (S[i].fall || S[i - 1].fall || S[i].gap || S[i].ramp)) i += 4;
@@ -1708,13 +1866,13 @@ function trySpawnHeart(chance) {
   ring.rotation.x = Math.PI / 2; ring.position.y = 0.12; g.add(ring);
   const x = s.x + s.nx * off, z = s.z + s.nz * off;
   g.position.set(x, s.y, z); world.group.add(g);
-  heartItem = { g, spr, ring, x, y: s.y, z, idx: i };
+  heartItem = { g, spr, ring, x, y: s.y, z, idx: i }; heartSpawns++;
 }
 function removeHeartItem() { if (heartItem) { world.group.remove(heartItem.g); heartItem = null; } }
 function updateHeartItem(dt) {
   if (state === 'playing') {
     heartTimer -= dt;
-    if (heartTimer <= 0) { heartTimer = HEART_CHECK; trySpawnHeart(0.5); }
+    if (heartTimer <= 0) { heartTimer = HEART_CHECK; trySpawnHeart(0.3); }
   }
   const h = heartItem;
   if (!h) return;
@@ -1805,10 +1963,17 @@ function updateCamera(dt) {
     lookTarget.set(P.x, Math.max(P.y, world.lakeY + 1), P.z);
   } else if (state === 'win') {
     const c = world.pondC;
-    camTarget.set(c.x, c.y + 6.5, c.z + 8);
-    lookTarget.set(c.x, c.y + 0.5, c.z);
+    if (levelIdx === LEVELS.length - 1) {   // 마지막 레벨: 집과 연못 둘레를 천천히 한 바퀴
+      const h = world.homeAt || c, mx = c.x + (h.x - c.x) * 0.25, mz = c.z + (h.z - c.z) * 0.25;   // 연못 가운데 오리 중심, 집도 함께 보이게
+      const tt = elapsed - winT0, a = Math.PI * 2 * (tt < 2 ? tt * tt / 4 : tt - 1) / FINAL_ORBIT;   // 처음 2초는 살살 출발, 그 뒤 일정한 속도로 계속
+      camTarget.set(mx + Math.sin(a) * 10, c.y + 6, mz + Math.cos(a) * 10);
+      lookTarget.set(mx, c.y + 0.8, mz);
+    } else {
+      camTarget.set(c.x, c.y + 6.5, c.z + 8);
+      lookTarget.set(c.x, c.y + 0.5, c.z);
+    }
   } else cameraGoal();
-  camera.position.lerp(camTarget, damp(state === 'win' ? 1.5 : 4, dt));
+  camera.position.lerp(camTarget, damp(state === 'win' && levelIdx !== LEVELS.length - 1 ? 1.5 : 4, dt));
   lookCur.lerp(lookTarget, damp(5, dt));
   camera.lookAt(lookCur);
   // 꾸미기 화면에서는 화면을 위로 밀어 오리가 꾸미기 창 위 빈 공간 가운데에 오게
@@ -1817,7 +1982,9 @@ function updateCamera(dt) {
   viewOff = lerp(viewOff, offGoal, damp(5, dt));
   if (Math.abs(viewOff) > 0.5) camera.setViewOffset(W, H, 0, viewOff, W, H);
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
-  sun.position.set(P.x + sunOff.x, P.y + sunOff.y, P.z + sunOff.z); sun.target.position.set(P.x, P.y, P.z);
+  // 그림자 범위를 그림자 텍셀 간격에 맞춰 옮김 → 오리가 움직여도 그림자 가장자리가 지글거리지 않음
+  const TX = 48 / 1024 * 4, sx = Math.round(P.x / TX) * TX, sz = Math.round(P.z / TX) * TX, sy = Math.round(P.y / TX) * TX;
+  sun.position.set(sx + sunOff.x, sy + sunOff.y, sz + sunOff.z); sun.target.position.set(sx, sy, sz);
   duckGlow.position.set(P.x, P.y + 1.6, P.z + 0.6);
 }
 
@@ -2005,6 +2172,13 @@ function tick(dt) {
       c.g.position.set(c.x, c.y + 0.02 + Math.abs(Math.sin(elapsed * 9 + c.phase)) * 0.05, c.z);
       for (const ch of c.g.children) if (ch.userData.sx) ch.rotation.z = ch.userData.sx * Math.sin(elapsed * 7 + c.phase) * 0.35;
     }
+    if (world.clock && !world.clock.taken) {   // 시계 둥실 + 좌우로 살랑 + 분침 빙글
+      const c = world.clock;
+      c.face.position.y = 0.8 + Math.sin(elapsed * 3) * 0.1;
+      c.face.rotation.y = Math.sin(elapsed * 1.6) * 0.5;
+      c.hand.rotation.z = -elapsed * 4;
+      c.ring.rotation.z += dt * 1.5;
+    }
     for (const it of world.items) if (!it.taken) {   // 아이템 둥실둥실 + 빙글
       it.mesh.position.y = it.y + 0.6 + Math.sin(elapsed * 3 + it.x) * 0.12;
       it.gem.rotation.y += dt * 2.5;
@@ -2061,6 +2235,7 @@ function tick(dt) {
 
 // ---------- UI ----------
 function show(id) {
+  $('#btnFinalResult').classList.add('hidden');
   for (const s of ['#title', '#levels', '#popup', '#wardrobe']) $(s).classList.toggle('hidden', s !== id);
   $('#hudHearts').style.visibility = id === '#popup' && state === 'paused' ? 'hidden' : '';   // 일시정지 중엔 남은 하트 숨김
 }
@@ -2154,8 +2329,8 @@ function startLevel(i) {
     hint.textContent = i + 1 === LEVELS.length ? t('hintFinal') : t('hintGrow');
     hint.classList.remove('hidden');
     setTimeout(() => hint.classList.add('hidden'), 5000);
-  } else if ([7, 13, 20, 30, 35].includes(i + 1)) {
-    hint.textContent = t({ 7: 'hintLog', 13: 'hintWhirl', 20: 'hintMill', 30: 'hintCrab', 35: 'hintJump' }[i + 1]);
+  } else if ([7, 13, 20, 21, 30, 35].includes(i + 1)) {
+    hint.textContent = t({ 7: 'hintLog', 13: 'hintWhirl', 20: 'hintMill', 21: 'hintClock', 30: 'hintCrab', 35: 'hintJump' }[i + 1]);
     hint.classList.remove('hidden');
     setTimeout(() => hint.classList.add('hidden'), 5000);
   } else if ((i + 1) % 5 === 0 && i > 0) {
