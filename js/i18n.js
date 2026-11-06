@@ -1,0 +1,156 @@
+// =====================================================================
+// Duckling's Journey - 언어 (한국어 / English)
+// 화면에 보이는 모든 글자는 여기서 가져옴. 새 문구를 넣을 땐 ko/en 둘 다 추가
+// =====================================================================
+const I18N = {
+  ko: {
+    subtitle: '귀여운 오리 가족 찾기',
+    start: '시작하기',
+    titleHint: '폰을 기울여 아기 오리를 가족에게 데려다 주세요!',
+    levelSelect: '레벨 선택',
+    back: '← 처음으로',
+    rotate: '📱 세로 모드로 즐겨 주세요',
+    pause: '일시정지', sound: '소리', prevPage: '이전 페이지', nextPage: '다음 페이지',
+    calib: '🎯 영점',
+    ctrlJoy: '🕹️ 조이스틱', ctrlToTilt: '📱 기울기로', ctrlToJoy: '🕹️ 조이스틱으로',
+    go: '출발!',
+    winTitle: '가족을 찾았어요!', winTitleLast: '이제 다 컸어요!',
+    clearLine: (n, t) => `Level ${n} 클리어 · ${t}초`,
+    newBest: '🎉 최고 기록!',
+    babiesWith: (a, b) => `🐥 아기 오리 ${a}/${b}마리와 함께 왔어요!`,
+    allDone: '나만의 연못에서 씩씩하게 혼자 살아갈 거예요 🏡',
+    hintGrow: '🐤 오리가 조금 더 자랐어요!',
+    hintFinal: '🏡 마지막 물길! 혼자 살아갈 새 보금자리로 떠나요',
+    nextLevel: '다음 레벨 ▶', playAgain: '다시 하기', levels: '레벨 선택',
+    timeUpTitle: '시간 초과!',
+    timeUpText: lim => `제한 시간 ${lim}초 안에 가족에게 가지 못했어요.<br>앞으로 기울이면 더 빨리 갈 수 있어요!`,
+    restartNow: '바로 재시작',
+    plopToast: h => `💦 퐁당! 하트 -1 (남은 하트 ${h}개)`,
+    noHeartsTitle: '하트를 모두 잃었어요', noHeartsText: '처음부터 다시 도전해요!',
+    shieldToast: s => `🛡️ 방패! ${s}초 동안 양쪽에 벽이 생겨요`,
+    hintGyro: '📱 폰을 기울여 오리를 움직여요',
+    hintJoy: '🕹️ 오른쪽 아래 조이스틱으로 움직여요',
+    hintCross: '⚠️ 옆 물살이 오리를 밀어요! 하얀 거품 쪽은 난간이 없으니 조심!',
+    hintLog: '🪵 통나무가 길을 막고 있어요! 반대쪽으로 피해요',
+    hintWhirl: '🌀 소용돌이에 빠지면 빙글빙글 느려져요!',
+    hintCrab: '🦀 꽃게가 왔다 갔다 해요! 부딪히면 밀려나요',
+    hintBabies: n => `🐥 길 위의 아기 오리 ${n}마리에게 닿으면 데려갈 수 있어요!`,
+    hintFalls: n => `💦 작은 폭포 ${n}개! 폭포를 타면 쭉 빨라져요`,
+    pauseTitle: '잠깐 쉬어요', resume: '계속하기', restart: '다시 시작',
+    musicOn: '🎵 음악 ON', musicOff: '🔇 음악 OFF',
+    language: '🌐 언어',
+    m_time: n => `⏱ ${n}초 안에 도착하기`,
+    m_nofall: '💗 한 번도 안 떨어지기',
+    m_babies: n => `🐥 아기 오리 ${n}마리 이상 데려오기`,
+    m_crab: '🦀 꽃게에 안 부딪히기',
+    m_whirl: '🌀 소용돌이에 안 빠지기',
+    m_log: '🪵 통나무에 안 부딪히기',
+    m_item: '🛡️ 방패 아이템 먹기',
+    m_bumps: n => `🧱 난간에 ${n}번 이하로 부딪히기`,
+    starsSaved: '모은 별',
+    heartToast: '❤️ 하트 +1!',
+    wardrobe: '👗 꾸미기', wardrobeTitle: '오리 꾸미기', toLevels: '← 레벨 선택',
+    starsTotal: n => `⭐ 모은 별 ${n} / 180`,
+    nextUnlock: (icon, name, left) => `다음 선물: ${icon} ${name} (별 ${left}개 더!)`,
+    allUnlocked: '🎉 모든 꾸미기를 열었어요!',
+    testUnlock: '🧪 테스트 모드: 꾸미기 전부 열림 (끄기: 주소 뒤 ?unlock=0)',
+    equipped: '착용 중', homeReward: '엔딩 특별판',
+    newLook: (icon, name) => `🎁 새 꾸미기 열림: ${icon} ${name}!`,
+    look_bow: '분홍 리본', look_flower: '데이지 꽃핀', look_bowblue: '하늘 리본', look_tube: '귀여운 튜브', look_tubedot: '땡땡이 튜브', look_donut: '도넛 튜브',
+    look_hat: '밀짚모자', look_santa: '산타 모자', look_party: '고깔모자', look_glasses: '선글라스', look_round: '동그란 안경', look_heartgl: '하트 안경',
+    look_scarf: '목도리', look_bell: '방울 목걸이', look_bowtie: '나비넥타이',
+    cat_bow: '리본', cat_tube: '튜브', cat_hat: '모자', cat_glasses: '안경', cat_scarf: '목도리', cat_special: '특별', close: '닫기',
+    look_crown: '왕관', look_rainbow: '무지개 물보라', look_gold: '황금 오리', look_home: '꾸며진 내 집',
+    hintMill: '🌊 물레방아! 날개가 물에 잠길 때 지나가면 튕겨 나가요',
+    hintJump: '🛝 점프대! 앞으로 기울여 속도를 내야 끊어진 물길을 건너요',
+    m_mill: '🌊 물레방아에 안 맞기',
+    m_jump: '🛝 점프하다 한 번도 안 빠지기',
+  },
+  en: {
+    subtitle: 'Find the Cute Duck Family',
+    start: 'Start',
+    titleHint: 'Tilt your phone to bring the little duck home to its family!',
+    levelSelect: 'Select Level',
+    back: '← Home',
+    rotate: '📱 Please play in portrait mode',
+    pause: 'Pause', sound: 'Sound', prevPage: 'Previous page', nextPage: 'Next page',
+    calib: '🎯 Recenter',
+    ctrlJoy: '🕹️ Joystick', ctrlToTilt: '📱 Use tilt', ctrlToJoy: '🕹️ Use joystick',
+    go: 'Go!',
+    winTitle: 'You found your family!', winTitleLast: 'All grown up!',
+    clearLine: (n, t) => `Level ${n} clear · ${t}s`,
+    newBest: '🎉 New best!',
+    babiesWith: (a, b) => `🐥 Brought ${a}/${b} ducklings along!`,
+    allDone: 'Time to live on your own in your very own pond 🏡',
+    hintGrow: '🐤 Your duck has grown a little!',
+    hintFinal: '🏡 The last waterway! Off to your very own new home',
+    nextLevel: 'Next Level ▶', playAgain: 'Play Again', levels: 'Levels',
+    timeUpTitle: "Time's up!",
+    timeUpText: lim => `You didn't reach your family within ${lim}s.<br>Tilt forward to go faster!`,
+    restartNow: 'Restart Now',
+    plopToast: h => `💦 Splash! -1 heart (${h} left)`,
+    noHeartsTitle: 'Out of hearts', noHeartsText: "Let's try again from the start!",
+    shieldToast: s => `🛡️ Shield! Walls on both sides for ${s}s`,
+    hintGyro: '📱 Tilt your phone to move the duck',
+    hintJoy: '🕹️ Use the joystick at the bottom right to move',
+    hintCross: '⚠️ Side currents push the duck! No railings where you see white foam!',
+    hintLog: '🪵 A log blocks the way! Go around the other side',
+    hintWhirl: '🌀 Whirlpools spin you around and slow you down!',
+    hintCrab: '🦀 Crabs walk side to side! Bump one and you get pushed',
+    hintBabies: n => `🐥 Touch the ${n} ducklings on the way to bring them along!`,
+    hintFalls: n => `💦 ${n} small waterfall${n > 1 ? 's' : ''}! Ride them to speed up`,
+    pauseTitle: 'Paused', resume: 'Resume', restart: 'Restart',
+    musicOn: '🎵 Music ON', musicOff: '🔇 Music OFF',
+    language: '🌐 Language',
+    m_time: n => `⏱ Finish within ${n}s`,
+    m_nofall: '💗 Never fall off',
+    m_babies: n => `🐥 Bring ${n}+ ducklings home`,
+    m_crab: "🦀 Don't bump into crabs",
+    m_whirl: '🌀 Stay out of whirlpools',
+    m_log: "🪵 Don't hit any logs",
+    m_item: '🛡️ Grab a shield',
+    m_bumps: n => `🧱 Bump the railings ${n} times or less`,
+    starsSaved: 'Stars earned',
+    heartToast: '❤️ +1 heart!',
+    wardrobe: '👗 Dress Up', wardrobeTitle: 'Dress Up Your Duck', toLevels: '← Levels',
+    starsTotal: n => `⭐ Stars collected ${n} / 180`,
+    nextUnlock: (icon, name, left) => `Next gift: ${icon} ${name} (${left} more stars!)`,
+    allUnlocked: '🎉 Everything unlocked!',
+    testUnlock: '🧪 Test mode: all items unlocked (turn off: add ?unlock=0)',
+    equipped: 'Wearing', homeReward: 'Special ending',
+    newLook: (icon, name) => `🎁 New item unlocked: ${icon} ${name}!`,
+    look_bow: 'Pink Bow', look_flower: 'Daisy Pin', look_bowblue: 'Sky Bow', look_tube: 'Swim Ring', look_tubedot: 'Polka Ring', look_donut: 'Donut Ring',
+    look_hat: 'Straw Hat', look_santa: 'Santa Hat', look_party: 'Party Hat', look_glasses: 'Sunglasses', look_round: 'Round Specs', look_heartgl: 'Heart Specs',
+    look_scarf: 'Scarf', look_bell: 'Bell Collar', look_bowtie: 'Bow Tie',
+    cat_bow: 'Bows', cat_tube: 'Rings', cat_hat: 'Hats', cat_glasses: 'Glasses', cat_scarf: 'Neckwear', cat_special: 'Special', close: 'Close',
+    look_crown: 'Crown', look_rainbow: 'Rainbow Splash', look_gold: 'Golden Duck', look_home: 'Decorated Home',
+    hintMill: '🌊 Watermill! Time your pass, or the paddles knock you back',
+    hintJump: '🛝 Jump ramp! Tilt forward to speed up and fly over the gap',
+    m_mill: "🌊 Don't get hit by a watermill",
+    m_jump: '🛝 Never fall into a gap',
+  },
+};
+
+let LANG = 'ko';
+try { LANG = localStorage.getItem('duckwaterway.lang') || 'ko'; } catch (e) {}
+if (!I18N[LANG]) LANG = 'ko';
+
+// t('key') 또는 t('key', 인자...) — 함수형 문구는 인자를 넣어 호출
+function t(key, ...args) {
+  const v = I18N[LANG][key] ?? I18N.ko[key] ?? key;
+  return typeof v === 'function' ? v(...args) : v;
+}
+
+// HTML 의 data-i18n(글자) / data-i18n-aria(aria-label) 를 현재 언어로 채움
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+}
+
+function setLang(l) {
+  if (!I18N[l]) return;
+  LANG = l;
+  try { localStorage.setItem('duckwaterway.lang', l); } catch (e) {}
+  applyLang();
+}

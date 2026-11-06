@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#bfe6ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Duckling’s Journey</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!-- 앱 화면: PC처럼 넓은 화면에서도 항상 폰 비율(세로)로 보여 줌 -->
+<div id="app">
+<canvas id="game"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="hud-info">
+      <div id="hudLevel">Level 1</div>
+      <div class="progress"><div id="progFill"></div><div id="progDuck">🐤</div><div class="prog-goal">🏡</div></div>
+    </div>
+    <button id="btnPause" class="icon-btn" data-i18n-aria="pause" aria-label="일시정지">II</button>
+  </div>
+  <div id="hudTime">0.0</div>
+  <div id="hudBabies" class="hidden">🐥 0/3</div>
+  <div id="hudHearts"></div>
+  <div id="hudShield" class="hidden">🛡️ 5</div>
+  <div id="hint" class="hint hidden"></div>
+  <div id="countdown" class="countdown hidden"></div>
+  <div class="hud-side">
+    <button id="btnControl" class="pill-btn">🕹️ 조이스틱</button>
+    <button id="btnCalib" class="pill-btn hidden" data-i18n="calib">🎯 영점</button>
+  </div>
+</div>
+
+<!-- 가상 조이스틱 (우측 하단, 자이로 미지원/거부 시 자동 생성) -->
+<div id="joyZone" class="hidden"><div id="joy"><div id="joyKnob"></div></div></div>
+
+<!-- 타이틀 -->
+<section id="title" class="screen">
+  <div class="title-card">
+    <h1>Duckling’s Journey</h1>
+    <p class="subtitle" data-i18n="subtitle">귀여운 오리 가족 찾기</p>
+    <button id="btnStart" class="big-btn" data-i18n="start">시작하기</button>
+  </div>
+  <button id="btnMute" class="icon-btn corner-btn" data-i18n-aria="sound" aria-label="소리">🔊</button>
+</section>
+
+<!-- 레벨 선택 -->
+<section id="levels" class="screen hidden">
+  <div class="panel">
+    <h2 data-i18n="levelSelect">레벨 선택</h2>
+    <div class="level-pager"><button id="pgPrev" data-i18n-aria="prevPage" aria-label="이전 페이지">◀</button><span id="pgLabel">1 ~ 20</span><button id="pgNext" data-i18n-aria="nextPage" aria-label="다음 페이지">▶</button></div>
+    <div id="levelGrid" class="level-grid"></div>
+    <div class="levels-bottom">
+      <button id="btnBackTitle" class="ghost-btn" data-i18n="back">← 처음으로</button>
+      <button id="btnWardrobe" class="pill-btn wardrobe-btn">👗 꾸미기</button>
+    </div>
+  </div>
+</section>
+
+<!-- 꾸미기 (별로 잠금 해제) -->
+<section id="wardrobe" class="screen hidden">
+  <div class="panel sheet">
+    <h2 data-i18n="wardrobeTitle">오리 꾸미기</h2>
+    <div id="wdStars" class="wd-stars"></div>
+    <div id="wdNext" class="wd-next"></div>
+    <div id="wdGrid" class="look-grid"></div>
+    <button id="btnWardrobeBack" class="ghost-btn" data-i18n="toLevels">← 레벨 선택</button>
+    <!-- 분류를 누르면 뜨는 3가지 고르기 -->
+    <div id="wdPop" class="wd-pop hidden">
+      <div class="wd-pop-card">
+        <h3 id="wdPopTitle"></h3>
+        <div id="wdPopItems" class="wd-pop-items"></div>
+        <button id="btnWdPopClose" class="ghost-btn" data-i18n="close">닫기</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 팝업 (승리/실패/일시정지) -->
+<section id="popup" class="screen hidden">
+  <div class="panel popup-panel">
+    <div id="popIcon" class="pop-icon"></div>
+    <h2 id="popTitle"></h2>
+    <p id="popText"></p>
+    <div id="popButtons" class="pop-buttons"></div>
+  </div>
+</section>
+
+<div id="rotateNote" class="hidden enabled" data-i18n="rotate">📱 세로 모드로 즐겨 주세요</div>
+</div>
+
+<script src="js/vendor/three.min.js"></script>   <!-- 앱에서 인터넷 없이도 되게 직접 포함 (three.js r128) -->
+<script src="js/i18n.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>

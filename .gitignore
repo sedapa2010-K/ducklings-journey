@@ -1,0 +1,5 @@
+dist/
+.claude/
+prd.txt
+__pycache__/
+*.bak
