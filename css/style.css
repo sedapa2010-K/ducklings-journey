@@ -73,6 +73,8 @@ h1 {
   box-shadow: 0 5px 0 var(--yellow-dark);
 }
 .pop-buttons button.secondary { background: #fff; box-shadow: 0 5px 0 #e8dcc6; font-size: 18px; }
+/* 결과 화면의 꾸미기 버튼: 레벨 선택 화면의 꾸미기 버튼과 같은 모양 */
+.pop-buttons button.wardrobe-btn { align-self: center; font-size: 15px; padding: 7px 12px; border-radius: 999px; background: var(--yellow); box-shadow: 0 3px 0 var(--yellow-dark); }
 
 /* ---------- HUD ---------- */
 #hud { position: absolute; inset: 0; pointer-events: none; }

@@ -5,7 +5,7 @@
 const I18N = {
   ko: {
     subtitle: '귀여운 오리 가족 찾기',
-    start: '시작하기',
+    start: 'START',
     titleHint: '폰을 기울여 아기 오리를 가족에게 데려다 주세요!',
     levelSelect: '레벨 선택',
     back: '← 처음으로',
@@ -68,7 +68,7 @@ const I18N = {
   },
   en: {
     subtitle: 'Find the Cute Duck Family',
-    start: 'Start',
+    start: 'START',
     titleHint: 'Tilt your phone to bring the little duck home to its family!',
     levelSelect: 'Select Level',
     back: '← Home',

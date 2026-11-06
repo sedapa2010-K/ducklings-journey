@@ -856,6 +856,7 @@ function buildLevelWorld(def) {
     mills.push({ g, wheel, s: sm, x: sm.x, y: sm.y, z: sm.z, R, H, w: sm.w, omega: 1.0 + rng() * 0.3, phase: rng() * 6, theta: 0, idx: i, hitT: -9 });
   }
   limit += Math.ceil(nLogs * 1.5 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
+  limit = Math.ceil(limit * 0.85);   // 모든 레벨 제한 시간 15% 줄임
 
   // 🌙 밤: 호수 위에 반짝이는 별빛 (반사)
   let lakeStars = null;
@@ -1639,8 +1640,8 @@ function startWin() {
         newLooks.map(l => `<span class="new-look">${t('newLook', l.icon, lookName(l))}</span>`).join('') +
         (last ? '<br>' + t('allDone') : ''),
       buttons: last
-        ? [[t('levels'), () => openLevels()], [t('playAgain'), () => startLevel(levelIdx), true]]
-        : [[t('nextLevel'), () => startLevel(levelIdx + 1)], [t('playAgain'), () => startLevel(levelIdx), true], [t('levels'), () => openLevels(), true]],
+        ? [[t('levels'), () => openLevels()], [t('playAgain'), () => startLevel(levelIdx), true], [`${t('wardrobe')} ⭐${totalStars()}`, () => { openLevels(); openWardrobe(); }, 'pill-btn wardrobe-btn']]
+        : [[t('nextLevel'), () => startLevel(levelIdx + 1)], [t('playAgain'), () => startLevel(levelIdx), true], [t('levels'), () => openLevels(), true], [`${t('wardrobe')} ⭐${totalStars()}`, () => { openLevels(); openWardrobe(); }, 'pill-btn wardrobe-btn']],
     });
   }, 1700);
 }
@@ -2061,6 +2062,7 @@ function tick(dt) {
 // ---------- UI ----------
 function show(id) {
   for (const s of ['#title', '#levels', '#popup', '#wardrobe']) $(s).classList.toggle('hidden', s !== id);
+  $('#hudHearts').style.visibility = id === '#popup' && state === 'paused' ? 'hidden' : '';   // 일시정지 중엔 남은 하트 숨김
 }
 function showCount(txt, go) {
   const el = $('#countdown'); el.textContent = txt; el.classList.remove('hidden', 'go');
@@ -2076,11 +2078,12 @@ function updateHud() {
   el.classList.toggle('urgent', left < 5);
 }
 function showPopup({ icon, title, text, buttons }) {
-  $('#popIcon').textContent = icon; $('#popTitle').textContent = title; $('#popText').innerHTML = text;
+  $('#popIcon').textContent = icon || ''; $('#popIcon').style.display = icon ? '' : 'none';   // 아이콘 없으면 자리도 비우지 않음
+  $('#popTitle').textContent = title; $('#popText').innerHTML = text;
   const box = $('#popButtons'); box.innerHTML = '';
   for (const [label, fn, secondary] of buttons) {
     const b = document.createElement('button'); b.textContent = label;
-    if (secondary) b.className = 'secondary';
+    if (secondary) b.className = typeof secondary === 'string' ? secondary : 'secondary';   // 문자열이면 그 클래스 그대로
     b.onclick = () => { Sfx.click(); fn(b); };
     box.appendChild(b);
   }
@@ -2174,7 +2177,7 @@ function pauseGame() {
 }
 function showPauseMenu(prev) {
   showPopup({
-    icon: '⏸️', title: t('pauseTitle'), text: `Level ${levelIdx + 1}` + missionListHtml(null, save.missions[levelIdx + 1] || 0),
+    icon: '', title: t('pauseTitle'), text: `Level ${levelIdx + 1}` + missionListHtml(null, save.missions[levelIdx + 1] || 0),
     buttons: [
       [t('resume'), () => { show(null); state = prev; lastT = performance.now(); setControlMode(controlMode); }],
       [t('restart'), () => startLevel(levelIdx), true],
