@@ -2091,7 +2091,8 @@ function showPopup({ icon, title, text, buttons }) {
 // 레벨 선택: 20개씩 페이지로 나눠 보여줌
 const PAGE_SIZE = 20;
 let levelPage = 0;
-const pageCount = () => Math.ceil(LEVELS.length / PAGE_SIZE);
+// 열린 레벨이 있는 페이지까지만 보여 줌 (다음 페이지는 그 첫 레벨이 열려야 나타남)
+const pageCount = () => Math.min(Math.ceil(LEVELS.length / PAGE_SIZE), Math.floor((Math.max(1, save.unlocked) - 1) / PAGE_SIZE) + 1);
 function openLevels() {
   state = 'levels';
   $('#hud').classList.add('hidden'); joyZone.classList.add('hidden');
@@ -2106,6 +2107,8 @@ function renderLevelPage() {
   $('#pgLabel').textContent = `${from + 1} ~ ${to}`;
   $('#pgPrev').disabled = levelPage === 0;
   $('#pgNext').disabled = levelPage >= pageCount() - 1;
+  $('#pgPrev').style.visibility = levelPage === 0 ? 'hidden' : '';
+  $('#pgNext').style.visibility = levelPage >= pageCount() - 1 ? 'hidden' : '';   // 아직 안 열린 페이지는 화살표도 숨김
   const grid = $('#levelGrid'); grid.innerHTML = '';
   for (let i = from; i < to; i++) {
     const n = i + 1, locked = n > save.unlocked;
