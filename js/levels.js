@@ -12,8 +12,8 @@
 function S(len, walls, w) { return { t: 'S', len, walls, w }; }
 function C(angle, radius, walls, w) { return { t: 'C', angle, radius, walls, w }; }
 function F(drop, len) { return { t: 'F', len: len || Math.max(1.8, drop * 1.25), drop, walls: 'both' }; }
-// J: 점프대 (경사로 2.0 → 끊어진 물길 3.0). 속도를 내서 날아가야 건너감
-function J() { return { t: 'J', len: 5.0, ramp: 2.0, gap: 3.0, h: 0.7, walls: 'both' }; }
+// J: 점프대 (경사로 2.0 → 끊어진 물길 3.8). 속도를 내서 날아가야 건너감
+function J() { return { t: 'J', len: 5.8, ramp: 2.0, gap: 3.8, h: 0.7, walls: 'both' }; }
 
 let LEVELS = [
   {
@@ -158,7 +158,7 @@ function courseOverlaps(def, checkPond = true) {
     const budget = -lakeY - 1.5 - (falls - bigN) * 1.2;
     const bigDrop = bigN ? Math.min(budget / bigN, 3.5 + 3 * Math.min(1, (n - 11) / 40) + rng() * 0.8) : 0;
     // 커브 중간 난간 끊김: 레벨 8부터, 높을수록 자주
-    const pGap = n < 8 ? 0 : 0.22 + 0.38 * Math.min(1, (n - 8) / 40);
+    const pGap = n < 8 ? 0 : 0.28 + 0.4 * Math.min(1, (n - 8) / 40);   // 난이도↑: 커브 난간 끊김 더 자주
     const gapCurve = p => {
       if (!pGap || p.t !== 'C' || Math.abs(p.angle) < 75 || p.walls === 'none' || rng() >= pGap) return [p];
       const outer = p.angle > 0 ? 'R' : 'L', inner = outer === 'R' ? 'L' : 'R';
@@ -174,7 +174,7 @@ function courseOverlaps(def, checkPond = true) {
     let ji = 0;
     const cw = (turn, long) => {                 // 코너 난간 (U턴·둥근 커브처럼 긴 커브는 바깥 난간은 항상 있음)
       const outer = turn > 0 ? 'R' : 'L';
-      const w = rng() < 0.75 - 0.45 * k ? 'both' : (rng() < 0.6 ? outer : 'none');
+      const w = rng() < 0.65 - 0.45 * k ? 'both' : (rng() < 0.6 ? outer : 'none');   // 난이도↑: 양쪽 난간 코너 줄임
       return long && w === 'none' ? outer : w;
     };
     const side = () => (rng() < 0.5 ? 1 : -1);
@@ -218,14 +218,17 @@ function courseOverlaps(def, checkPond = true) {
       }
       while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; }
       const len = n <= 20 ? 4 + rng() * 4 : n <= 40 ? 3 + rng() * 3 : 2.5 + rng() * 2.5;   // 코너가 많을수록 직선은 짧게
-      if (c < n && rng() < 0.35 + 0.35 * k) pieces.push(S(len, 'none'), S(2, 'both'));
+      if (c < n && rng() < 0.42 + 0.33 * k) pieces.push(S(len * 1.15, 'none'), S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
       else pieces.push(S(len, 'both'));
     }
     pieces.push(S(5, 'both'));
+    // 난이도↑: 레벨이 오를수록 폭은 최대 10% 좁게, 유속 최대 +10%, 옆 물살 최대 +25%
+    const hard = Math.min(1, (n - 6) / 30);
     return {
-      flow: +(2.8 + 0.6 * k + 0.2 * k2).toFixed(2),
-      width: +(3.6 - 0.5 * k).toFixed(2),
-      cross: +(1.8 + 0.5 * k).toFixed(2),
+      flow: +((2.8 + 0.6 * k + 0.2 * k2) * (1 + 0.1 * hard)).toFixed(2),
+      baseFlow: +(2.8 + 0.6 * k + 0.2 * k2).toFixed(2),   // 제한 시간 계산용 (물살이 세져도 시간이 줄지 않게)
+      width: +((3.6 - 0.5 * k) * (1 - 0.1 * hard)).toFixed(2),
+      cross: +((1.8 + 0.5 * k) * (1 + 0.25 * hard)).toFixed(2),
       pieces,
     };
   }
@@ -238,7 +241,11 @@ function courseOverlaps(def, checkPond = true) {
       if (cand && !courseOverlaps(cand)) return cand;
     }
     console.warn('겹치지 않는 코스를 못 만듦: 레벨', n);
-    return build(n, seeded(n * 97 + 13));
+    for (let attempt = 60; attempt < 400; attempt++) {   // 시드를 더 바꿔 가며 (도착 섬 겹침은 눈감아 줌)
+      const cand = build(n, seeded(n * 97 + 13 + attempt * 7919));
+      if (cand) return cand;
+    }
+    return { flow: 3, width: 3.4, cross: 2, pieces: [S(10, 'both'), C(-90, 6, 'both'), S(10, 'both')] };   // 최후의 안전한 코스
   }
   const fixed = LEVELS.slice();
   fixed.forEach((L, i) => { L.no = i + 1; if (courseOverlaps(L)) console.warn('코스 겹침: 레벨', i + 1); });
