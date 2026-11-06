@@ -231,10 +231,34 @@ function addOutlined(group, geo, mat, pos, scale, outline = true, e = 0.024) {
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const sph = new THREE.SphereGeometry(1, 20, 14);
 const sphLow = new THREE.SphereGeometry(1, 10, 8);
+const sphHi = new THREE.SphereGeometry(1, 36, 26);   // 오리 몸·머리용 매끈한 구
+const sphMid = new THREE.SphereGeometry(1, 18, 14);
+sphHi.userData.keep = sphMid.userData.keep = true;
+
+// 오리 전용 재질: 4단계 부드러운 툰 음영 + 가장자리 림 라이트(테두리가 은은하게 밝아짐)
+const duckGrad = new THREE.DataTexture(new Uint8Array([150, 200, 235, 255]), 4, 1, THREE.LuminanceFormat);
+duckGrad.minFilter = duckGrad.magFilter = THREE.NearestFilter; duckGrad.needsUpdate = true;
+const duckMatCache = {};
+function duckToon(color, rim = 0.32) {
+  const key = color + '_' + rim;
+  if (duckMatCache[key]) return duckMatCache[key];
+  const m = new THREE.MeshToonMaterial({ color, gradientMap: duckGrad });
+  m.onBeforeCompile = sh => {
+    sh.uniforms.rimStr = { value: rim };
+    sh.fragmentShader = 'uniform float rimStr;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+      `float rimF = 1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0);
+       gl_FragColor.rgb += vec3(1.0, 0.97, 0.85) * smoothstep(0.55, 0.95, rimF) * rimStr;
+       #include <dithering_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'duckRim' + rim;
+  return (duckMatCache[key] = m);
+}
 
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0x2b1d14 });
 const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 const blushMat = new THREE.MeshBasicMaterial({ color: 0xff8fab, transparent: true, opacity: 0.75 });
+const irisMat = new THREE.MeshBasicMaterial({ color: 0x6b4a2e });
+const nostrilMat = new THREE.MeshBasicMaterial({ color: 0xb4581c });
 
 // 소용돌이 무늬 (나선)
 const whirlTex = canvasTex(128, 128, (g, w, h) => {
@@ -277,34 +301,48 @@ function makeDuck(opts = {}) {
   const body = opts.body || 0xffd84d, bill = opts.bill || 0xff9a3c;
   const root = new THREE.Group();
   const bob = new THREE.Group(); root.add(bob);
-  const B = toon(body), Bi = toon(bill);
-  addOutlined(bob, sph, B, V(0, 0.22, 0.04), V(0.4, 0.31, 0.44));                  // 몸통 (작고 동글)
-  const tail = addOutlined(bob, sph, B, V(0, 0.4, 0.42), V(0.12, 0.1, 0.15));       // 꼬리
+  const B = duckToon(body), Bi = duckToon(bill, 0.2);
+  const belly = new THREE.Color(body).lerp(new THREE.Color(0xfff6d0), 0.38).getHex();   // 배·볼은 살짝 밝은 크림색
+  addOutlined(bob, sphHi, B, V(0, 0.22, 0.04), V(0.4, 0.31, 0.44));                 // 몸통 (작고 동글)
+  addOutlined(bob, sphMid, duckToon(belly, 0.2), V(0, 0.23, -0.23), V(0.24, 0.17, 0.18), false);   // 앞가슴 밝은 털
+  const tail = addOutlined(bob, sphMid, B, V(0, 0.4, 0.42), V(0.12, 0.1, 0.15));    // 꼬리
   tail.rotation.x = -0.6;
-  addOutlined(bob, sph, B, V(0, 0.74, -0.2), V(0.34, 0.32, 0.32));                  // 큰 머리
+  const tail2 = addOutlined(bob, sphMid, B, V(0, 0.47, 0.5), V(0.06, 0.06, 0.09));  // 꼬리 끝 살짝 위로
+  tail2.rotation.x = -0.9;
+  addOutlined(bob, sphHi, B, V(0, 0.74, -0.2), V(0.34, 0.32, 0.32));                // 큰 머리
+  addOutlined(bob, sphMid, duckToon(belly, 0.15), V(0, 0.665, -0.41), V(0.16, 0.1, 0.1), false);  // 부리 주변 밝은 얼굴
   // 머리 깃털 3가닥
   const tufts = [];
   [[0, 1.08, -0.16, 0], [-0.06, 1.05, -0.12, 0.5], [0.06, 1.05, -0.12, -0.5]].forEach(([x, y, z, r]) => {
-    const t = addOutlined(bob, sphLow, B, V(x, y, z), V(0.04, 0.1, 0.04));
+    const t = addOutlined(bob, sphMid, B, V(x, y, z), V(0.04, 0.1, 0.04));
     t.rotation.z = r; t.rotation.x = -0.3; tufts.push(t);
   });
-  // 부리: 위아래 두 겹으로 살짝 웃는 모양
-  const up = addOutlined(bob, sph, Bi, V(0, 0.68, -0.52), V(0.12, 0.045, 0.1));
+  // 부리: 위아래 두 겹으로 살짝 웃는 모양 + 콧구멍
+  const up = addOutlined(bob, sphMid, Bi, V(0, 0.68, -0.52), V(0.12, 0.045, 0.1));
   up.rotation.x = -0.15;
-  addOutlined(bob, sph, toon(0xf08a2c), V(0, 0.645, -0.5), V(0.09, 0.03, 0.08), false);
-  // 날개: 몸보다 조금 진한 노랑 + 윤곽선, 몸에서 살짝 바깥으로
-  const wingL = addOutlined(bob, sph, toon(opts.wing || 0xf2b01e), V(-0.39, 0.28, 0.06), V(0.08, 0.15, 0.25));
-  const wingR = addOutlined(bob, sph, toon(opts.wing || 0xf2b01e), V(0.39, 0.28, 0.06), V(0.08, 0.15, 0.25));
+  addOutlined(bob, sphMid, duckToon(0xf08a2c, 0.15), V(0, 0.645, -0.5), V(0.09, 0.03, 0.08), false);
+  for (const sx of [-1, 1]) {
+    const n = new THREE.Mesh(sphLow, nostrilMat); n.scale.set(0.012, 0.007, 0.01); n.position.set(sx * 0.035, 0.712, -0.6); bob.add(n);
+  }
+  // 날개: 몸보다 조금 진한 노랑 + 윤곽선, 끝에 깃털 두 겹
+  const wingCol = opts.wing || 0xf2b01e, W = duckToon(wingCol, 0.25);
+  const tip = duckToon(new THREE.Color(wingCol).multiplyScalar(0.9).getHex(), 0.2);
+  const wingL = addOutlined(bob, sphHi, W, V(-0.39, 0.28, 0.06), V(0.08, 0.15, 0.25));
+  const wingR = addOutlined(bob, sphHi, W, V(0.39, 0.28, 0.06), V(0.08, 0.15, 0.25));
+  for (const w of [wingL, wingR]) for (const [y, z] of [[-0.35, 0.55], [-0.05, 0.8]]) {
+    const f = new THREE.Mesh(sphMid, tip); f.scale.set(0.9, 0.45, 0.35); f.position.set(0, y, z); w.add(f);   // 날개 끝 깃털 (날개 크기 기준)
+  }
   const eyes = [];
   for (const sx of [-1, 1]) {
     const eye = new THREE.Group();
     eye.position.set(sx * 0.135, 0.79, -0.475);
     eye.rotation.y = sx * -0.35;
-    const pupil = new THREE.Mesh(sphLow, eyeMat); pupil.scale.set(0.065, 0.085, 0.04); eye.add(pupil);
-    const s1 = new THREE.Mesh(sphLow, shineMat); s1.scale.set(0.024, 0.026, 0.01); s1.position.set(-sx * 0.018, 0.03, -0.035); eye.add(s1);
-    const s2 = new THREE.Mesh(sphLow, shineMat); s2.scale.setScalar(0.011); s2.position.set(sx * 0.02, -0.03, -0.036); eye.add(s2);
+    const pupil = new THREE.Mesh(sphMid, eyeMat); pupil.scale.set(0.065, 0.085, 0.04); eye.add(pupil);
+    const iris = new THREE.Mesh(sphMid, irisMat); iris.scale.set(0.045, 0.04, 0.01); iris.position.set(0, -0.032, -0.033); eye.add(iris);   // 눈 아래쪽 갈색 반사
+    const s1 = new THREE.Mesh(sphMid, shineMat); s1.scale.set(0.026, 0.028, 0.01); s1.position.set(-sx * 0.018, 0.03, -0.037); eye.add(s1);
+    const s2 = new THREE.Mesh(sphMid, shineMat); s2.scale.setScalar(0.012); s2.position.set(sx * 0.02, -0.028, -0.04); eye.add(s2);
     bob.add(eye); eyes.push(eye);
-    const blush = new THREE.Mesh(sphLow, blushMat);
+    const blush = new THREE.Mesh(sphMid, blushMat);
     blush.scale.set(0.075, 0.04, 0.02); blush.position.set(sx * 0.22, 0.665, -0.44); blush.rotation.y = sx * -0.6;
     bob.add(blush);
   }
@@ -1730,16 +1768,34 @@ function snapCamera() {
   const g = lookAheadGoal(); look.x = g.x; look.z = g.z;
   cameraGoal(); camera.position.copy(camTarget); lookCur.copy(lookTarget); camera.lookAt(lookCur);
 }
+let viewOff = 0;
+// 꾸미기 창 윗부분이 화면 위에서 몇 % 위치인지 (창이 없으면 1)
+function wdTopFrac() {
+  const sh = document.querySelector('#wardrobe .panel'), a = appEl.getBoundingClientRect();
+  if (!sh || !a.height || $('#wardrobe').classList.contains('hidden')) return 1;
+  return Math.min(1, Math.max(0, (sh.getBoundingClientRect().top - a.top) / a.height));
+}
+// 오리가 바라보는 물길 앞쪽 방향 (카메라가 있을 쪽)
+function wardrobeDir() {
+  const S = world && world.samples;
+  if (!S) return { x: 0, z: -1 };
+  const a = S[Math.min(S.length - 1, P.idx + 4)];
+  const l = Math.hypot(a.tx, a.tz) || 1;
+  return { x: a.tx / l, z: a.tz / l };
+}
 function updateCamera(dt) {
   if (state === 'playing' || state === 'countdown') {
     const g = lookAheadGoal(), k = damp(1.8, dt);
     look.x = lerp(look.x, g.x, k); look.z = lerp(look.z, g.z, k);
   }
-  if (state === 'wardrobe') {   // 꾸미기 화면: 오리를 가까이, 화면 위쪽에 크게
-    const t = elapsed * 0.35;
-    const r = 3.4 * duck.scale.x;
-    camTarget.set(P.x + Math.sin(t) * r, P.y + 1.3 * duck.scale.x, P.z + Math.cos(t) * r);
-    lookTarget.set(P.x, P.y - 0.55 * duck.scale.x, P.z);
+  if (state === 'wardrobe') {   // 꾸미기 화면: 물길 앞쪽(트인 쪽)에서 오리 얼굴을 정면으로. 벽에 가리지 않게 살짝 위에서
+    const sc = duck.scale.x, f = wardrobeDir();
+    const visH = Math.max(0.25, wdTopFrac());                       // 꾸미기 창 위로 보이는 화면 비율
+    const ang = THREE.MathUtils.degToRad(camera.fov) * visH;
+    const dist = Math.max(1.6 * sc, (1.35 * sc / 0.68) / (2 * Math.tan(ang / 2)));   // 모자까지 포함해 보이는 칸의 60% 정도 크기
+    const el = 0.38, cy = P.y + 0.68 * sc;
+    camTarget.set(P.x + f.x * dist * Math.cos(el), cy + dist * Math.sin(el), P.z + f.z * dist * Math.cos(el));
+    lookTarget.set(P.x, cy, P.z);
   } else if (state === 'title' || state === 'levels') {
     const t = elapsed * 0.15;
     camTarget.set(P.x + Math.sin(t) * 6, P.y + 3.5, P.z + Math.cos(t) * 6);
@@ -1754,6 +1810,12 @@ function updateCamera(dt) {
   camera.position.lerp(camTarget, damp(state === 'win' ? 1.5 : 4, dt));
   lookCur.lerp(lookTarget, damp(5, dt));
   camera.lookAt(lookCur);
+  // 꾸미기 화면에서는 화면을 위로 밀어 오리가 꾸미기 창 위 빈 공간 가운데에 오게
+  const W = appEl.clientWidth, H = appEl.clientHeight;
+  const offGoal = state === 'wardrobe' ? H * (1 - wdTopFrac()) / 2 : 0;
+  viewOff = lerp(viewOff, offGoal, damp(5, dt));
+  if (Math.abs(viewOff) > 0.5) camera.setViewOffset(W, H, 0, viewOff, W, H);
+  else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   sun.position.set(P.x + sunOff.x, P.y + sunOff.y, P.z + sunOff.z); sun.target.position.set(P.x, P.y, P.z);
   duckGlow.position.set(P.x, P.y + 1.6, P.z + 0.6);
 }
@@ -1796,8 +1858,12 @@ function animateDuck(dt) {
     duck.position.set(P.x, P.y, P.z);
     duck.rotation.y += P.spin * dt; u.bob.rotation.z += P.spin * 0.4 * dt;
     u.wingL.rotation.z = -Math.sin(elapsed * 30) * 0.9; u.wingR.rotation.z = Math.sin(elapsed * 30) * 0.9;
-  } else { // title / levels: 제자리 둥실
+  } else { // title / levels / wardrobe: 제자리 둥실
     duck.position.set(P.x, P.y, P.z);
+    if (state === 'wardrobe') {   // 카메라를 보고 좌우로 천천히 몸을 돌려 옆모습까지 보여 줌
+      const f = wardrobeDir(), face = Math.atan2(-f.x, -f.z);
+      duck.rotation.set(0, face + Math.sin(elapsed * 0.8) * 0.8, 0);
+    } else duck.rotation.set(0, P.yaw, 0);
     u.bob.position.y = Math.abs(Math.sin(elapsed * 2.6)) * 0.05;
     u.bob.rotation.z = Math.sin(elapsed * 1.7) * 0.12;
   }
