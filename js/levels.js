@@ -14,6 +14,8 @@ function C(angle, radius, walls, w) { return { t: 'C', angle, radius, walls, w }
 function F(drop, len) { return { t: 'F', len: len || Math.max(1.8, drop * 1.25), drop, walls: 'both' }; }
 // J: 점프대 (경사로 2.0 → 끊어진 물길 3.8). 속도를 내서 날아가야 건너감
 function J() { return { t: 'J', len: 5.8, ramp: 2.0, gap: 3.8, h: 0.7, walls: 'both' }; }
+// K: 갈림길 (가운데 섬이 물길을 둘로 나눔). side 쪽(1=왼쪽, -1=오른쪽)은 ⚡빠른 물살 + 바깥 난간 없음, 반대쪽은 느리지만 안전
+function K(len, side, w, ih) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih }; }
 
 let LEVELS = [
   {
@@ -172,6 +174,12 @@ function courseOverlaps(def, checkPond = true) {
     const jumpAfter = [];
     for (let j = 1; j <= jumps; j++) jumpAfter.push(Math.round(n * (j - 0.5) / jumps) + 1);
     let ji = 0;
+    // 🔀 갈림길: 레벨 16~35 = 1개, 36~ = 2개. 코스 모양이 예전과 같게 따로 만든 난수 사용
+    const frng = seeded(n * 131 + 7);
+    const hard0 = Math.min(1, (n - 6) / 30), width0 = (3.6 - 0.5 * k) * (1 - 0.1 * hard0);
+    const forks = n < 16 ? 0 : n < 36 ? 1 : 2;
+    const forkAfter = forks === 1 ? [Math.round(n * 0.62)] : forks === 2 ? [Math.round(n * 0.34), Math.round(n * 0.8)] : [];
+    let ki = 0;
     const cw = (turn, long) => {                 // 코너 난간 (U턴·둥근 커브처럼 긴 커브는 바깥 난간은 항상 있음)
       const outer = turn > 0 ? 'R' : 'L';
       const w = rng() < 0.65 - 0.45 * k ? 'both' : (rng() < 0.6 ? outer : 'none');   // 난이도↑: 양쪽 난간 코너 줄임
@@ -216,7 +224,13 @@ function courseOverlaps(def, checkPond = true) {
         else pieces.push(S(3, 'both'), F(1.2), S(4, 'both'));
         fi++;
       }
-      while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; }
+      let jumped = false;
+      while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; jumped = true; }
+      if (!jumped && ki < forkAfter.length && forkAfter[ki] <= c && c < n) {
+        const fs = frng() < 0.5 ? 1 : -1, fw = +(width0 * 1.75 + 1.2).toFixed(2), ih = +(0.075 * width0 + 0.6).toFixed(2);
+        pieces.push(S(3, 'both'), K(+(15 + frng() * 4).toFixed(1), fs, fw, ih), S(3, 'both'));
+        ki++;
+      }
       const len = n <= 20 ? 4 + rng() * 4 : n <= 40 ? 3 + rng() * 3 : 2.5 + rng() * 2.5;   // 코너가 많을수록 직선은 짧게
       if (c < n && rng() < 0.42 + 0.33 * k) pieces.push(S(len * 1.15, 'none'), S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
       else pieces.push(S(len, 'both'));

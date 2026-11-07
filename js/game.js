@@ -19,6 +19,8 @@ const GRAVITY = 20;
 const lakeYFor = n => -1.3 - Math.floor((n - 1) / 5) * 2;   // 1~5: 수면 바로 위(-1.3), 6~10: -3.3, ... 56~60: -23.3 (5레벨마다 2씩 높아짐)
 let LAKE_Y = -6;          // 현재 레벨의 호수 높이
 const FALL_BOOST = 14;    // 폭포 경사에서 받는 앞쪽 가속
+const BOOST_K = 0.75;     // ⚡ 가속 물살: 물살 세기 +75%
+const BOOST_T = 2.2;      // ⚡ 가속 물살 패드를 밟으면 빨라지는 시간(초)
 const SHIELD_TIME = 5;    // 방패 아이템: 양쪽 벽이 세워지는 시간(초)
 const MAX_HEARTS = 5;     // 하트(목숨) 기본 개수
 const JUMP_G = 12;        // 점프 중 중력
@@ -96,6 +98,20 @@ const waterTex = canvasTex(128, 256, (g, w, h) => {
 });
 waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
 const waterMat = new THREE.MeshToonMaterial({ map: waterTex, gradientMap: gradTex, transparent: true, opacity: 0.93, side: THREE.DoubleSide });
+// ⚡ 가속 물살: 하늘빛 바탕 위 노란 화살표(⌃)가 앞으로 흘러감
+const boostTex = canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = 'rgba(140,235,255,0.35)'; g.fillRect(0, 0, w, h);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 14; g.beginPath(); g.moveTo(12, 18); g.lineTo(32, 42); g.lineTo(52, 18); g.stroke();
+  g.strokeStyle = 'rgba(255,214,60,1)'; g.lineWidth = 8; g.beginPath(); g.moveTo(12, 18); g.lineTo(32, 42); g.lineTo(52, 18); g.stroke();
+});
+boostTex.wrapS = boostTex.wrapT = THREE.RepeatWrapping;
+const boostMat = new THREE.MeshBasicMaterial({ map: boostTex, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+const forkSignTex = canvasTex(64, 64, (g) => {   // 갈림길 표지: 노란 동그라미 + 번개
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#ffd43b'; g.beginPath(); g.arc(32, 32, 25, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#e8590c'; g.beginPath(); g.moveTo(36, 10); g.lineTo(18, 36); g.lineTo(30, 36); g.lineTo(26, 54); g.lineTo(46, 26); g.lineTo(34, 26); g.closePath(); g.fill();
+});
 
 // 폭포 물줄기 / 폭포 아래 거품
 const fallTex = canvasTex(64, 128, (g, w, h) => {
@@ -289,6 +305,19 @@ const fountainBoilMat = new THREE.MeshBasicMaterial({ color: 0xe9f8ff, transpare
 const fountainTopMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
 
 // 꽃게 (좌우로 왔다 갔다)
+function makeFrog() {   // 🐸 앞(-z)이 오리 쪽
+  const g = new THREE.Group(), green = toon(0x6cc24a);
+  addOutlined(g, sphLow, green, V(0, 0.14, 0), V(0.2, 0.14, 0.22), true, 0.02);
+  const belly = new THREE.Mesh(sphLow, toon(0xd9f2a6)); belly.scale.set(0.15, 0.08, 0.12); belly.position.set(0, 0.1, -0.1); g.add(belly);
+  for (const sx of [-1, 1]) {
+    addOutlined(g, sphLow, toon(0xffffff), V(sx * 0.09, 0.27, -0.1), V(0.065, 0.065, 0.065), true, 0.015);
+    const pu = new THREE.Mesh(sphLow, new THREE.MeshBasicMaterial({ color: 0x222222 })); pu.scale.setScalar(0.033); pu.position.set(sx * 0.09, 0.28, -0.155); g.add(pu);
+    const leg = new THREE.Mesh(sphLow, green); leg.scale.set(0.07, 0.05, 0.13); leg.position.set(sx * 0.17, 0.06, 0.04); g.add(leg);
+    const arm = new THREE.Mesh(sphLow, green); arm.scale.set(0.04, 0.06, 0.04); arm.position.set(sx * 0.1, 0.05, -0.15); g.add(arm);
+  }
+  const cheek = new THREE.Mesh(sphLow, toon(0xff9fb6)); cheek.scale.set(0.12, 0.02, 0.02); cheek.position.set(0, 0.17, -0.2); g.add(cheek);   // 웃는 입
+  return g;
+}
 function makeCrab() {
   const g = new THREE.Group();
   const red = toon(0xff7a59), dark = toon(0xe9553a);
@@ -426,6 +455,7 @@ function sampleTrack(def) {
     const fx = -Math.sin(th), fz = -Math.cos(th);
     out.push({ x, y, z, tx: fx, tz: fz, nx: fz, nz: -fx, d, slope,   // n = 진행 방향의 왼쪽
       fall: p.t === 'F', ramp: !!flags.ramp, gap: !!flags.gap,
+      fork: !!p.fork, fside: p.fork ? p.fside : 0, ih: flags.ih || 0,   // 🔀 갈림길: 가운데 섬 반폭(ih), 빠른 쪽(fside)
       w: (p.w || def.width) / 2,
       wl: p.walls === 'both' || p.walls === 'L',
       wr: p.walls === 'both' || p.walls === 'R' });
@@ -449,6 +479,11 @@ function sampleTrack(def) {
         const u = (i + 1) / n;
         y = y0 - p.drop * (u * u * (3 - 2 * u));
         slope = p.drop * 6 * u * (1 - u) / len;
+      }
+      if (p.fork) {   // 섬은 앞뒤 끝이 뾰족하게 (물길이 넓어진 뒤에 시작)
+        const dd = (i + 1) * ds, r = x => { const u = clamp((x - 2) / 3, 0, 1); return u * u * (3 - 2 * u); };
+        push(p, 0, { ih: p.ih * r(dd) * r(len - dd) });
+        continue;
       }
       push(p, slope);
     }
@@ -716,7 +751,7 @@ function buildLevelWorld(def) {
     const count = Math.min(10, levelNo / 5 + 2);   // 5:3, 10:4, ... 40~60: 10
     for (let j = 0; j < count; j++) {
       let i = Math.round(30 + (N - 60) * (j + 0.5) / count);
-      while (samples[i].fall || samples[i].gap || samples[i].ramp || (i > 0 && samples[i - 1].fall)) i += 6;
+      while (samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork || (i > 0 && samples[i - 1].fall)) i += 6;
       const sb = samples[i];
       const off = (rng() - 0.5) * 0.9 * sb.w;   // 가운데에서 살짝 비껴서
       const d = makeDuck({ scale: 0.55 });
@@ -734,17 +769,28 @@ function buildLevelWorld(def) {
   const items = [];
   const nItems = levelNo < 3 ? 0 : Math.min(4, 1 + Math.floor((levelNo - 3) / 12));   // 3:1, 15:2, 27:3, 39~60: 4
   if (nItems) {
-    const dangerStarts = [];
-    for (let i = 20; i < N - 20; i++) {
-      const open = !samples[i].wl || !samples[i].wr, prevOpen = !samples[i - 1].wl || !samples[i - 1].wr;
-      if (open && !prevOpen) dangerStarts.push(i);
+    // 방패가 쓸모 있는 곳에만: 먹은 뒤 방패가 유지되는 동안(5초) 지나갈 거리 안에
+    // 난간 없는 곳이 충분히(3칸 이상) 있어야 함. 그런 곳이 없으면 방패 수를 줄임 (빈 곳에 억지로 안 놓음)
+    const openAt = sm => (!sm.wl || !sm.wr) && !sm.island && !sm.gap && !sm.ramp;
+    const LEAD = 14;                                                       // 위험 구간 약 3.5 앞에 놓음
+    const cover = Math.round(SHIELD_TIME * def.flow * 1.15 / 0.25);        // 방패 유지 동안 가는 샘플 수
+    const cands = [];
+    for (let i = 20 + LEAD; i < N - 20; i++) {
+      if (!openAt(samples[i]) || openAt(samples[i - 1])) continue;         // 난간 없는 구간이 시작되는 곳
+      let open = 0;
+      for (let k = i; k < Math.min(N - 1, i - LEAD + cover); k++) if (openAt(samples[k])) open++;
+      if (open >= 12) cands.push({ i, open });
     }
+    cands.sort((a, b) => b.open - a.open);                                 // 위험한 곳부터, 서로 겹치지 않게
     const picks = [];
-    if (dangerStarts.length >= nItems) for (let j = 0; j < nItems; j++) picks.push(dangerStarts[Math.floor((j + 0.5) * dangerStarts.length / nItems)] - 14);
-    else for (let j = 0; j < nItems; j++) picks.push(Math.round(20 + (N - 40) * (j + 0.5) / nItems));
+    for (const c of cands) {
+      if (picks.length >= nItems) break;
+      if (picks.every(p => Math.abs(p - (c.i - LEAD)) > cover)) picks.push(c.i - LEAD);
+    }
+    picks.sort((a, b) => a - b);
     for (let i of picks) {
       i = clamp(i, 10, N - 10);
-      while ((samples[i].fall || samples[i].gap || samples[i].ramp) && i < N - 10) i++;
+      while ((samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork) && i < N - 10) i++;
       const si = samples[i];
       const m = new THREE.Group();
       const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), toon(0x6fd3ff));
@@ -765,12 +811,37 @@ function buildLevelWorld(def) {
     m.visible = false; group.add(m); shieldWalls.push(m);
   }
 
+  // 🔀 갈림길(레벨 16~): 가운데 잔디 섬. 한쪽은 ⚡빠른 물살(바깥 난간 없음), 반대쪽은 느리지만 안전
+  for (const [a, b] of runs(samples.map(s => ({ x: s.ih > 0.01 })), 'x')) {
+    const fs = samples[Math.floor((a + b) / 2)].fside;
+    add(ribbon(samples, a, b, s => s.ih, 0.32, s => -s.ih, 0.32, toon(0x8fd67a, { side: THREE.DoubleSide })));
+    add(ribbon(samples, a, b, s => s.ih, -0.05, s => s.ih, 0.32, stoneMat()));
+    add(ribbon(samples, a, b, s => -s.ih, -0.05, s => -s.ih, 0.32, stoneMat()));
+    group.add(ribbon(samples, a, b, s => fs * (s.ih + 0.1), 0.045, s => fs * (s.w - 0.1), 0.045, boostMat, 1.3));
+    for (let i = a + 8, j = 0; i < b - 8; i += 7, j++) {   // 섬 위 덤불·꽃
+      const sm = samples[i];
+      if (sm.ih < 0.45) continue;
+      if (j % 3 === 1) {
+        const bush = new THREE.Mesh(sphLow, toon(0x5fbf5a)); bush.scale.set(0.42, 0.32, 0.42);
+        bush.position.set(sm.x, sm.y + 0.4, sm.z); bush.castShadow = true; group.add(bush);
+      } else for (const sg of [1, -1]) {
+        const o = sg * sm.ih * 0.45, fl = new THREE.Mesh(sphLow, toon([0xff9fb6, 0xffffff, 0xffd84d][(j + (sg > 0 ? 1 : 0)) % 3]));
+        fl.scale.setScalar(0.1); fl.position.set(sm.x + sm.nx * o, sm.y + 0.42, sm.z + sm.nz * o); group.add(fl);
+      }
+    }
+    const sn = samples[Math.min(b, a + 13)];   // 섬 앞쪽 표지판: 빠른 길 방향으로 기울어진 ⚡
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.1, 6), toon(0x9b6a3c));
+    post.position.set(sn.x, sn.y + 0.85, sn.z); post.castShadow = true; group.add(post);
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: forkSignTex, transparent: true, depthWrite: false }));
+    sign.scale.setScalar(0.75); sign.position.set(sn.x + sn.nx * fs * 0.25, sn.y + 1.55, sn.z + sn.nz * fs * 0.25); group.add(sign);
+  }
+
   // ---------- 장애물 ----------
   // 통나무(레벨 7~), 소용돌이(13~), 꽃게(30~). 레벨이 오를수록 개수 증가.
   // 아이템·아기 오리·폭포 근처와 코너는 피해서 직선 구간에 놓음
   const busy = [];
   items.forEach(it => busy.push(it.idx)); babies.forEach(b => busy.push(b.idx));
-  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap) busy.push(i); });
+  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap || sm.fork) busy.push(i); });
   const straightAt = i => { const a = samples[Math.max(0, i - 10)], b = samples[Math.min(N - 1, i + 10)]; return a.tx * b.tx + a.tz * b.tz > 0.97; };
   // i 주변(±10)에 난간이 있는지: side = 1(왼쪽), -1(오른쪽), 0(양쪽)
   const walledAt = (i, side = 0) => {
@@ -798,7 +869,7 @@ function buildLevelWorld(def) {
   // 통나무: 2~3개를 번갈아 좌우에 놓아 지그재그로 피해 가게. 양쪽 난간이 있는 직선에만 (피하다 바로 추락하지 않게)
   const LOG_GAP = levelNo < 30 ? 15 : 13;                  // 통나무 사이 간격 (샘플 수, 0.25 씩 → 약 3.3~3.8)
   // 통나무가 막는 쪽 = side, 지나가는 쪽(-side)에는 난간이 있어야 함 (피하다 바로 추락하지 않게)
-  const logOk = (k, side) => { const sm = samples[k]; return sm && !sm.fall && !sm.ramp && !sm.gap && walledAt(k, -side); };
+  const logOk = (k, side) => { const sm = samples[k]; return sm && !sm.fall && !sm.ramp && !sm.gap && !sm.fork && walledAt(k, -side); };
   const logPlan = new Map();                               // 자리 → [통나무 수, 첫 통나무 쪽]
   const logRun = i => {
     const tries = levelNo < 25 ? [2] : rng() < 0.6 ? [3, 2] : [2, 3];   // 레벨 25부터 3개 묶음도 (안 되면 2개)
@@ -901,6 +972,29 @@ function buildLevelWorld(def) {
     group.add(g);
     mills.push({ g, wheel, s: sm, x: sm.x, y: sm.y, z: sm.z, R, H, w: sm.w, omega: 1.0 + rng() * 0.3, phase: rng() * 6, theta: 0, idx: i, hitT: -9 });
   }
+  // ⚡ 가속 물살 패드(레벨 8~): 양쪽 난간 있는 직선에 화살표 물살. 지나가면 잠깐 쌩~
+  const nBoost = levelNo < 8 ? 0 : Math.min(4, 1 + Math.floor((levelNo - 8) / 12));   // 8:1, 20:2, 32:3, 44~: 4
+  const boosts = [];
+  for (const i of pickSpots(nBoost, 18, i => walledAt(i))) {
+    const sm = samples[i], hw = Math.min(0.62, sm.w * 0.42), off = (rng() - 0.5) * 2 * (sm.w - hw - 0.25);
+    group.add(ribbon(samples, i - 5, i + 5, () => off + hw, 0.045, () => off - hw, 0.045, boostMat, 1.3));
+    boosts.push({ idx: i, off, hw, hitT: -9 });
+  }
+  // 🐸 개구리(레벨 4~): 난간 옆 연잎 위에 앉아 있다가 오리가 다가오면 호수로 폴짝 (보는 재미, 부딪히지 않음)
+  const frogs = [];
+  const nFrogs = levelNo < 4 ? 0 : Math.min(6, 2 + Math.floor(levelNo / 12));
+  for (let j = 0; j < nFrogs; j++) {
+    let i = Math.round(30 + (N - 80) * (j + 0.5) / nFrogs), tries = 0;
+    const sg = rng() < 0.5 ? 1 : -1, side = sg > 0 ? 'wl' : 'wr';
+    const bad = k => !samples[k][side] || samples[k].island || samples[k].fork || busy.some(b => Math.abs(b - k) < 8);
+    while (tries++ < 40 && i < N - 20 && bad(i)) i += 3;
+    if (i >= N - 20 || bad(i)) continue;
+    const sm = samples[i], lat = sg * (sm.w - 0.42), x = sm.x + sm.nx * lat, z = sm.z + sm.nz * lat;
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14, 0.3, Math.PI * 2 - 0.6), toon(0x5cb85c, { side: THREE.DoubleSide }));
+    pad.rotation.x = -Math.PI / 2; pad.rotation.z = rng() * 6; pad.position.set(x, sm.y + 0.04, z); group.add(pad);
+    const g = makeFrog(); g.scale.setScalar(1.4); g.position.set(x, sm.y + 0.05, z); g.rotation.y = Math.atan2(sm.tx, sm.tz); group.add(g);
+    frogs.push({ g, pad, x, y: sm.y + 0.05, z, idx: i, s: sm, sg, state: 'sit', vx: 0, vy: 0, vz: 0, phase: rng() * 6 });
+  }
   limit += Math.ceil(nFount * 2.5 + logCount * 1.2 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
   limit = Math.ceil(limit * 0.85 * (1 + 0.12 * clamp((levelNo - 6) / 30, 0, 1)));   // 15% 줄임. 대신 길이 좁고 난간 없는 곳이 많아진 만큼 최대 12% 돌려줌
 
@@ -923,7 +1017,7 @@ function buildLevelWorld(def) {
     const bonus = levelNo >= 50 ? 10 : levelNo >= 35 ? 7 : 5;
     const taken = [...logs, ...whirls, ...crabs, ...mills].map(o => o.idx);
     let i = Math.round(N * 0.9);
-    while (i < N - 30 && (samples[i].fall || samples[i].ramp || samples[i].gap || samples[i - 4].fall || taken.some(k => Math.abs(k - i) < 14))) i += 3;
+    while (i < N - 30 && (samples[i].fall || samples[i].ramp || samples[i].gap || samples[i].fork || samples[i - 4].fall || taken.some(k => Math.abs(k - i) < 14))) i += 3;
     if (i < N - 30) {
       const sm = samples[i], g = new THREE.Group();
       g.visible = false;   // 시간이 빠듯할 때만 나타남
@@ -942,7 +1036,7 @@ function buildLevelWorld(def) {
       clock = { g, face, hand: hM, ring, x: sm.x, y: sm.y, z: sm.z, idx: i, bonus, taken: false, shown: false, skip: false };
     }
   }
-  return { theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock, fountains };
+  return { theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock, fountains, boosts, frogs };
 }
 
 // 다 자란 오리의 새 보금자리: 작은 나무 오리 집
@@ -1605,9 +1699,10 @@ function titleCam() {   // 가족 정면에서 좌우로 천천히 살랑 (뒤�
 const START_I = 4;    // 출발 위치
 function resetDuck() {
   const s = world.samples[START_I];
-  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: 0, vy: 0, vz: 0, idx: START_I, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null });
+  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: 0, vy: 0, vz: 0, idx: START_I, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false });
   P.yaw = Math.atan2(-s.tx, -s.tz);
   duck.visible = true; duck.rotation.set(0, P.yaw, 0); duck.position.set(P.x, P.y, P.z);
+  resetAmbient();
   snapCamera();
   timeT = 0; celebrateT = 0; shieldT = 0; hearts = MAX_HEARTS; updateHeartsHud();
   heartItem = null; heartTimer = HEART_CHECK; heartSpawns = 0;
@@ -1648,6 +1743,7 @@ function physicsStep(dt) {
   const def = LEVELS[levelIdx];
   const S = world.samples;
   let s = S[P.idx];
+  if (P.boostT > 0) P.boostT = Math.max(0, P.boostT - dt);
 
   // 카메라 기준 방향으로 입력 → 힘
   const fx = camF.x, fz = camF.z, rx = -fz, rz = fx;
@@ -1673,7 +1769,16 @@ function physicsStep(dt) {
 
   // 물살: 오리 속도를 흐름 속도로 끌어당김 (부력/관성 느낌)
   // 옆 물살: 물길을 따라 좌우로 천천히 바뀌는 흐름 (레벨이 오를수록 강해짐)
-  const flow = def.flow;
+  // ⚡ 빨라지는 물살: 가속 패드를 밟았거나 갈림길의 빠른 쪽. 갈림길의 안전한 쪽은 조금 느림
+  let flowMul = 1;
+  if (s.ih > 0.3 && s.fside) {
+    const fast = P.lat * s.fside > 0;
+    if (fast) { P.boostT = Math.max(P.boostT, 0.35); if (!P.inFast) Sfx.whoosh(); }
+    else flowMul = 0.88;
+    P.inFast = fast;
+  } else P.inFast = false;
+  if (P.boostT > 0) flowMul = 1 + BOOST_K * Math.min(1, P.boostT / 0.35);
+  const flow = def.flow * flowMul;
   const cross = (def.cross || 0) * Math.sin(s.d * 0.32 + 1.3) * Math.min(1, s.d / 8);
   const flowK = 1 - 0.85 * Math.min(1, whirlK * 2.5);
   P.vx += (s.tx * flow * flowK + s.nx * cross - P.vx) * WATER_DRAG * dt + ax * dt;
@@ -1733,8 +1838,29 @@ function physicsStep(dt) {
       startFall(); return;
     }
   }
+  // 🔀 갈림길 가운데 섬: 섬에 들어서기 전에 있던 쪽 길로만 다님 (섬에 부딪히면 튕김)
+  if (s.ih > 0.02) {
+    const sg = P.forkSide || (lat >= 0 ? 1 : -1), lim2 = s.ih + DUCK_R, over = lim2 - lat * sg;
+    if (over > 0) {
+      P.x += s.nx * sg * over; P.z += s.nz * sg * over; lat = sg * lim2;
+      const vn = -(P.vx * s.nx + P.vz * s.nz) * sg;
+      if (vn > 0) {
+        P.vx += s.nx * sg * vn * (1 + WALL_REST); P.vz += s.nz * sg * vn * (1 + WALL_REST);
+        if (vn > 1.2 && elapsed - lastBump > 0.25) { lastBump = elapsed; Sfx.bump(); stats.bumps++; }
+      }
+    }
+  } else P.forkSide = lat >= 0 ? 1 : -1;
   P.lat = lat;
   P.prog = s.d + along;
+  for (const b of world.boosts) {   // ⚡ 가속 패드
+    if (Math.abs(P.idx - b.idx) > 5 || Math.abs(lat - b.off) > b.hw + 0.2) continue;
+    if (elapsed - b.hitT > 1) {
+      Sfx.whoosh(); burst(P.x, P.y + 0.2, P.z, 10, 2, 0.07, 0.45);
+      P.vx += s.tx * 1.5; P.vz += s.tz * 1.5;
+      if (P.boostT < 0.5) showToast(t('boostToast'), 900);
+    }
+    b.hitT = elapsed; P.boostT = BOOST_T;
+  }
   // 물길 높이 (샘플 사이 보간)
   const nb = S[clamp(P.idx + (along >= 0 ? 1 : -1), 0, S.length - 1)];
   const span = Math.abs(nb.d - s.d) || 1;
@@ -1984,7 +2110,7 @@ function respawn() {
     i = Math.max(START_I, i - 16);
   }
   const s = S[i], flow = LEVELS[levelIdx].flow;
-  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: s.tx * flow * 0.5, vz: s.tz * flow * 0.5, vy: 0, idx: i, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null });
+  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: s.tx * flow * 0.5, vz: s.tz * flow * 0.5, vy: 0, idx: i, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false });
   P.yaw = Math.atan2(-s.tx, -s.tz);
   duck.visible = true; duck.rotation.set(0, P.yaw, 0); duck.userData.bob.rotation.set(0, 0, 0);
   trail.length = 0;   // 따라오던 아기 오리들도 바로 뒤로
@@ -2005,7 +2131,7 @@ function trySpawnHeart(chance) {
   if (!world || heartItem || hearts > 3 || hearts >= MAX_HEARTS || heartSpawns >= HEART_MAX_PER_LEVEL || Math.random() > chance) return;
   const S = world.samples, N = S.length;
   let i = P.idx + 40 + Math.floor(Math.random() * 25);   // 10~16 정도 앞
-  while (i < N - 20 && (S[i].fall || S[i - 1].fall || S[i].gap || S[i].ramp)) i += 4;
+  while (i < N - 20 && (S[i].fall || S[i - 1].fall || S[i].gap || S[i].ramp || S[i].fork)) i += 4;
   if (i >= N - 20) return;
   const s = S[i], off = (Math.random() - 0.5) * 0.8 * s.w;
   const g = new THREE.Group();
@@ -2124,6 +2250,101 @@ function updateRain(dt) {
     const S = world.samples, sm = S[Math.min(S.length - 1, Math.max(0, P.idx + Math.floor(Math.random() * 40) - 8))];
     const off = (Math.random() * 2 - 1) * sm.w * 0.9;
     spawnDrop(sm.x + sm.nx * off, sm.y + 0.05, sm.z + sm.nz * off, 0, 0.9 + Math.random() * 0.6, 0, 0.035, 0.22);
+  }
+}
+
+// ---------- 🐟🐦 길가 이벤트: 물고기 점프 · 새 떼 · 🐸 개구리 (게임에는 영향 없음, 보는 재미) ----------
+const fishPool = [];
+for (const col of [0xff9f43, 0xb8c7d6]) {   // 주황 붕어, 은빛 물고기 (머리 = +z)
+  const g = new THREE.Group(), m = toon(col);
+  addOutlined(g, sphLow, m, V(0, 0, 0), V(0.12, 0.16, 0.34), true, 0.02);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.26, 4), m); tail.rotation.x = Math.PI / 2; tail.scale.set(0.3, 1, 1); tail.position.z = -0.42; g.add(tail);
+  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.16, 4), m); fin.scale.set(0.3, 1, 1); fin.position.set(0, 0.17, -0.02); g.add(fin);
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(sphLow, new THREE.MeshBasicMaterial({ color: 0x222222 })); e.scale.setScalar(0.03); e.position.set(sx * 0.1, 0.04, 0.2); g.add(e); }
+  g.visible = false; scene.add(g);
+  fishPool.push({ g, on: false, t: 0, T: 1, h: 1, a: null, b: null });
+}
+const flock = { g: new THREE.Group(), birds: [], on: false, t: 0, T: 1, a: null, b: null, y: 0 };
+flock.g.visible = false; scene.add(flock.g);
+[[0, 0], [-0.9, -0.8], [0.9, -0.8], [-1.8, -1.6], [1.8, -1.6]].forEach(([ox, oz], k) => {   // V자 편대 (머리 = +z)
+  const b = new THREE.Group(); b.position.set(ox, Math.sin(k) * 0.2, oz);
+  const body = new THREE.Mesh(sphLow, toon(0xffffff)); body.scale.set(0.13, 0.11, 0.3); body.castShadow = true; b.add(body);
+  const head = new THREE.Mesh(sphLow, toon(0xffffff)); head.scale.setScalar(0.1); head.position.set(0, 0.06, 0.26); b.add(head);
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 5), toon(0xffa94d)); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.05, 0.38); b.add(beak);
+  const wings = [];
+  for (const sx of [-1, 1]) {
+    const pv = new THREE.Group(); pv.position.set(sx * 0.08, 0.04, 0); b.add(pv);
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.025, 0.2), toon(0xf1f3f5)); w.position.x = sx * 0.31; w.castShadow = true; pv.add(w);
+    wings.push([pv, sx]);
+  }
+  flock.g.add(b); flock.birds.push({ b, wings, ph: k * 0.7 });
+});
+let fishT = 4, birdT = 8;
+function resetAmbient() {
+  for (const f of fishPool) { f.on = false; f.g.visible = false; }
+  flock.on = false; flock.g.visible = false;
+  fishT = 3 + Math.random() * 3; birdT = 6 + Math.random() * 6;
+  if (world && world.frogs) for (const f of world.frogs) { f.state = 'sit'; f.g.visible = true; f.g.position.set(f.x, f.y, f.z); f.g.rotation.x = 0; }
+}
+function spawnFish() {
+  const S = world.samples, N = S.length;
+  const i = Math.min(N - 30, P.idx + 26 + Math.floor(Math.random() * 26));
+  const sm = S[i], f = fishPool.find(q => !q.on);
+  if (!sm || !f || sm.island || sm.y - LAKE_Y < 0.9) return;
+  const sg = Math.random() < 0.5 ? 1 : -1, reach = sm.w + 2.2 + Math.random() * 1.5, fw = (Math.random() * 2 - 1) * 1.5;
+  f.a = { x: sm.x + sm.nx * sg * reach + sm.tx * fw, z: sm.z + sm.nz * sg * reach + sm.tz * fw };
+  f.b = { x: sm.x - sm.nx * sg * reach - sm.tx * fw, z: sm.z - sm.nz * sg * reach - sm.tz * fw };
+  f.h = sm.y - LAKE_Y + 1.2 + Math.random() * 0.7; f.t = 0; f.T = 1.1 + f.h * 0.09; f.on = true; f.g.visible = true;
+  burst(f.a.x, LAKE_Y + 0.05, f.a.z, 8, 1.6, 0.07, 0.5); Sfx.splash(0.1);
+}
+function spawnBirds() {
+  const S = world.samples, sm = S[Math.min(S.length - 1, P.idx + 14)];
+  let fx = lookCur.x - camera.position.x, fz = lookCur.z - camera.position.z; const l = Math.hypot(fx, fz) || 1; fx /= l; fz /= l;
+  const sg = Math.random() < 0.5 ? 1 : -1, rx = -fz * sg, rz = fx * sg, D = 17;
+  flock.a = { x: sm.x - rx * D, z: sm.z - rz * D }; flock.b = { x: sm.x + rx * D, z: sm.z + rz * D };
+  flock.y = sm.y + 2.4 + Math.random() * 0.8; flock.t = 0; flock.T = (2 * D) / 4.6; flock.on = true; flock.g.visible = true;
+  const n = 3 + Math.floor(Math.random() * 3);
+  flock.birds.forEach((q, k) => { q.b.visible = k < n; });
+}
+function updateAmbient(dt) {
+  if (world && state === 'playing') {
+    fishT -= dt; birdT -= dt;
+    if (fishT <= 0) { fishT = 4.5 + Math.random() * 5; spawnFish(); }
+    if (birdT <= 0) { birdT = 11 + Math.random() * 9; if (world.theme !== 'night' && !flock.on) spawnBirds(); }
+  }
+  for (const f of fishPool) if (f.on) {
+    f.t += dt; const u = f.t / f.T;
+    if (u >= 1) { f.on = false; f.g.visible = false; burst(f.b.x, LAKE_Y + 0.05, f.b.z, 8, 1.6, 0.07, 0.5); continue; }
+    const at = v => [lerp(f.a.x, f.b.x, v), LAKE_Y + 4 * f.h * v * (1 - v), lerp(f.a.z, f.b.z, v)];
+    const p0 = at(u), p1 = at(Math.min(1, u + 0.02));
+    f.g.position.set(p0[0], p0[1], p0[2]); f.g.lookAt(p1[0], p1[1], p1[2]); f.g.rotateY(Math.sin(elapsed * 22) * 0.18);   // 꼬리 살랑
+  }
+  if (flock.on) {
+    flock.t += dt; const u = flock.t / flock.T;
+    if (u >= 1) { flock.on = false; flock.g.visible = false; }
+    else {
+      flock.g.position.set(lerp(flock.a.x, flock.b.x, u), flock.y + Math.sin(u * 6) * 0.25, lerp(flock.a.z, flock.b.z, u));
+      flock.g.lookAt(flock.b.x, flock.g.position.y, flock.b.z);
+      for (const q of flock.birds) for (const [pv, sx] of q.wings) pv.rotation.z = sx * Math.sin(elapsed * 9 + q.ph) * 0.65;
+    }
+  }
+  if (world && world.frogs) for (const f of world.frogs) {
+    if (f.state === 'sit') {
+      f.g.scale.set(1.4, 1.4 * (1 + Math.sin(elapsed * 3 + f.phase) * 0.05), 1.4);   // 숨쉬기
+      const ahead = f.idx - P.idx;
+      if (state === 'playing' && ahead < 17 && ahead > -6) {   // 오리가 다가오면 바깥 호수로 폴짝
+        f.state = 'jump';
+        f.vx = f.s.nx * f.sg * 2.1 + f.s.tx * 0.4; f.vz = f.s.nz * f.sg * 2.1 + f.s.tz * 0.4; f.vy = 3.8;
+        f.g.rotation.y = Math.atan2(f.vx, f.vz) + Math.PI;   // 뛰는 쪽을 바라봄 (앞 = -z)
+        burst(f.x, f.y + 0.05, f.z, 5, 1.2, 0.05, 0.35);
+      }
+    } else if (f.state === 'jump') {
+      f.vy -= 9 * dt;
+      const q = f.g.position; q.x += f.vx * dt; q.y += f.vy * dt; q.z += f.vz * dt;
+      f.g.rotation.x = clamp(-f.vy * 0.12, -0.5, 0.5);
+      f.g.scale.set(1.4, 1.6, 1.4);
+      if (q.y < LAKE_Y + 0.05) { f.state = 'gone'; f.g.visible = false; burst(q.x, LAKE_Y + 0.05, q.z, 7, 1.4, 0.06, 0.45); }
+    }
   }
 }
 function setWeather(kind, heavy) {
@@ -2419,6 +2640,10 @@ function tick(dt) {
     for (const w of world.whirls) w.m.rotation.z += dt * 3.2;
     for (const m of world.mills) { m.theta = m.phase + elapsed * m.omega; m.wheel.rotation.x = m.theta; }   // 물레방아 회전                                         // 소용돌이 회전
     fountainTex.offset.y -= dt * 2.2;   // 물기둥 무늬가 위로 흘러감
+    boostTex.offset.y -= dt * 2.4;      // ⚡ 화살표가 앞으로 흘러감
+    boostMat.opacity = 0.78 + Math.sin(elapsed * 6) * 0.14;
+    if (state === 'playing' && P.boostT > 0.05 && !P.air && Math.random() < dt * 35)   // 빨라진 동안 뒤로 물보라
+      spawnDrop(P.x + Math.sin(P.yaw) * 0.45 + (Math.random() - 0.5) * 0.4, P.y + 0.08, P.z + Math.cos(P.yaw) * 0.45 + (Math.random() - 0.5) * 0.4, 0, 1 + Math.random(), 0, 0.06, 0.35);
     for (const f of world.fountains) {   // ⛲ 쉬기 → 보글보글(예고) → 솟구침 → 쉬기 (시간은 매번 랜덤)
       f.t -= dt;
       if (f.t <= 0) {
@@ -2518,6 +2743,7 @@ function tick(dt) {
   updateCamera(dt);
   updateWeather(dt);
   updateRain(dt);
+  updateAmbient(dt);
 }
 
 // ---------- UI ----------
@@ -2617,8 +2843,8 @@ function startLevel(i) {
     hint.textContent = i + 1 === LEVELS.length ? t('hintFinal') : t('hintGrow');
     hint.classList.remove('hidden');
     setTimeout(() => hint.classList.add('hidden'), 5000);
-  } else if ([7, 13, 20, 21, 25, 30, 35].includes(i + 1)) {
-    hint.textContent = t({ 7: 'hintLog', 13: 'hintWhirl', 20: 'hintMill', 21: 'hintClock', 25: 'hintFountain', 30: 'hintCrab', 35: 'hintJump' }[i + 1]);
+  } else if ([7, 8, 13, 16, 20, 21, 25, 30, 35].includes(i + 1)) {
+    hint.textContent = t({ 7: 'hintLog', 8: 'hintBoost', 13: 'hintWhirl', 16: 'hintFork', 20: 'hintMill', 21: 'hintClock', 25: 'hintFountain', 30: 'hintCrab', 35: 'hintJump' }[i + 1]);
     hint.classList.remove('hidden');
     setTimeout(() => hint.classList.add('hidden'), 5000);
   } else if ((i + 1) % 5 === 0 && i > 0) {
