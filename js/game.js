@@ -501,7 +501,9 @@ function buildLevelWorld(def) {
   LAKE_Y = lakeYFor(levelNo);
   const theme = themeFor(levelNo), biome = biomeFor(levelNo);
   applyTheme(theme, biome);
-  setWeather(biome.id === 'snow' ? 'snow' : biome.id === 'mountain' ? 'leaves' : 'none', theme === 'night');   // 설원 밤은 함박눈
+  const rainy = isRainy(levelNo);
+  if (rainy) applyRainTint(theme);
+  setWeather(rainy ? 'rain' : biome.id === 'snow' ? 'snow' : biome.id === 'mountain' ? 'leaves' : 'none', theme === 'night');   // 설원 밤은 함박눈
   lake.position.y = LAKE_Y;
   const group = new THREE.Group();
   const samples = sampleTrack(def);
@@ -818,7 +820,8 @@ function buildLevelWorld(def) {
     for (let j = 0; j < cnt; j++, side = -side) {
       const li = i + j * LOG_GAP, sm = samples[li];
       if (j) busy.push(li);
-      const a = side * sm.w, b = side * sm.w * 0.08, L = Math.abs(a - b), mid = (a + b) / 2;
+      const a = side * sm.w, full = side * sm.w * 0.08, b = j === 1 ? a + (full - a) * 0.7 : full;   // 연속 통나무의 두 번째는 70% 길이
+      const L = Math.abs(a - b), mid = (a + b) / 2;
       const g = new THREE.Group();
       g.position.set(sm.x + sm.nx * mid, sm.y + 0.12, sm.z + sm.nz * mid);
       g.rotation.y = Math.atan2(-sm.tx, -sm.tz);
@@ -2082,8 +2085,50 @@ const leafMat = new THREE.PointsMaterial({ size: 0.6, map: leafTex, transparent:
 const weatherPts = new THREE.Points(wGeo, snowMat);
 weatherPts.frustumCulled = false; weatherPts.visible = false; scene.add(weatherPts);
 let weather = { kind: 'none', n: 0, fall: 1, sway: 0.5, init: false };
+
+// 🌧️ 비 오는 레벨: 설원·첫 5레벨·마지막 레벨을 빼고 일부 레벨에 비 (레벨 번호로 정해져서 항상 같은 레벨)
+//    → 12, 19, 26, 33, 40, 47
+const isRainy = n => n >= 6 && n < 60 && biomeFor(n).id !== 'snow' && (n * 37 + 11) % 7 === 0;
+function applyRainTint(theme) {   // 하늘·안개는 잿빛으로, 햇빛은 약하게, 구름은 회색
+  const k = theme === 'night' ? 0.25 : 0.5, gray = new THREE.Color(theme === 'night' ? 0x2a3140 : 0x8794a3);
+  scene.background.lerp(gray, k); scene.fog.color.lerp(gray, k);
+  scene.fog.near *= 0.8; scene.fog.far *= 0.85;
+  sun.intensity *= 0.55; hemi.intensity *= 0.88;
+  cloudMat.color.lerp(new THREE.Color(0x8e98a3), 0.6);
+  lakeMat.color.lerp(new THREE.Color(0x3c5268), 0.25);
+}
+const RAIN_MAX = 700;
+const rPos = new Float32Array(RAIN_MAX * 6), rSp = new Float32Array(RAIN_MAX);
+const rGeo = new THREE.BufferGeometry(); rGeo.setAttribute('position', new THREE.BufferAttribute(rPos, 3));
+const rainLines = new THREE.LineSegments(rGeo, new THREE.LineBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.55, depthWrite: false }));
+rainLines.frustumCulled = false; rainLines.visible = false; scene.add(rainLines);
+let rainInit = false;
+function updateRain(dt) {
+  if (!rainLines.visible) return;
+  const cx = lookCur.x, cy = lookCur.y, cz = lookCur.z, span = WY1 - WY0, wind = 2.2;
+  for (let i = 0; i < RAIN_MAX; i++) {
+    const k = i * 6;
+    if (!rainInit) { rPos[k] = cx + (Math.random() * 2 - 1) * WX; rPos[k + 1] = cy + WY0 + Math.random() * span; rPos[k + 2] = cz + (Math.random() * 2 - 1) * WX; rSp[i] = 15 + Math.random() * 6; }
+    const vy = rSp[i];
+    rPos[k] += wind * dt; rPos[k + 1] -= vy * dt;
+    if (rPos[k + 1] < cy + WY0) rPos[k + 1] += span;
+    if (rPos[k] < cx - WX) rPos[k] += WX * 2; else if (rPos[k] > cx + WX) rPos[k] -= WX * 2;
+    if (rPos[k + 2] < cz - WX) rPos[k + 2] += WX * 2; else if (rPos[k + 2] > cz + WX) rPos[k + 2] -= WX * 2;
+    // 빗줄기: 떨어지는 방향으로 짧은 선
+    rPos[k + 3] = rPos[k] - wind * 0.045; rPos[k + 4] = rPos[k + 1] + vy * 0.045; rPos[k + 5] = rPos[k + 2];
+  }
+  rainInit = true;
+  rGeo.attributes.position.needsUpdate = true;
+  // 물 위에 톡톡 튀는 빗방울
+  if (world && (state === 'playing' || state === 'countdown' || state === 'win') && Math.random() < dt * 40) {
+    const S = world.samples, sm = S[Math.min(S.length - 1, Math.max(0, P.idx + Math.floor(Math.random() * 40) - 8))];
+    const off = (Math.random() * 2 - 1) * sm.w * 0.9;
+    spawnDrop(sm.x + sm.nx * off, sm.y + 0.05, sm.z + sm.nz * off, 0, 0.9 + Math.random() * 0.6, 0, 0.035, 0.22);
+  }
+}
 function setWeather(kind, heavy) {
   weather = { kind, n: kind === 'snow' ? (heavy ? 1000 : 520) : kind === 'leaves' ? 280 : 0, fall: kind === 'snow' ? (heavy ? 1.7 : 1.15) : 0.9, sway: kind === 'snow' ? 0.5 : 1.4, init: false };
+  rainLines.visible = kind === 'rain'; rainInit = false;
   weatherPts.visible = weather.n > 0;
   if (!weather.n) return;
   weatherPts.material = kind === 'snow' ? snowMat : leafMat;
@@ -2464,7 +2509,7 @@ function tick(dt) {
   // ❄️ 눈은 updateWeather()에서 하얀 눈송이로 내림 (예전 노르스름한 빛 눈은 지움)
   if (world && world.theme === 'night') {   // 🌙 별빛 반짝 + 오리 주변 반딧불 (눈 오는 설원엔 반딧불 없음)
     if (world.lakeStars) world.lakeStars.material.opacity = 0.6 + Math.sin(elapsed * 2.3) * 0.25;
-    if (world.biome !== 'snow' && Math.random() < dt * 5) {
+    if (world.biome !== 'snow' && !rainLines.visible && Math.random() < dt * 5) {   // 눈·비 오는 날엔 반딧불 없음
       const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 4;
       spawnSprite(fireflyTex, P.x + look.x + Math.cos(a) * r, P.y + 0.4 + Math.random() * 1.6, P.z + look.z + Math.sin(a) * r,
         (Math.random() - 0.5) * 0.4, 0.15 + Math.random() * 0.2, (Math.random() - 0.5) * 0.4, 0.3, 2.6, 0);
@@ -2472,6 +2517,7 @@ function tick(dt) {
   }
   updateCamera(dt);
   updateWeather(dt);
+  updateRain(dt);
 }
 
 // ---------- UI ----------
