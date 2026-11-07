@@ -102,15 +102,15 @@ const waterMat = new THREE.MeshToonMaterial({ map: waterTex, gradientMap: gradTe
 const boostTex = canvasTex(64, 64, (g, w, h) => {
   g.fillStyle = 'rgba(140,235,255,0.35)'; g.fillRect(0, 0, w, h);
   g.lineCap = 'round'; g.lineJoin = 'round';
-  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 14; g.beginPath(); g.moveTo(12, 18); g.lineTo(32, 42); g.lineTo(52, 18); g.stroke();
-  g.strokeStyle = 'rgba(255,214,60,1)'; g.lineWidth = 8; g.beginPath(); g.moveTo(12, 18); g.lineTo(32, 42); g.lineTo(52, 18); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 14; g.beginPath(); g.moveTo(12, 46); g.lineTo(32, 22); g.lineTo(52, 46); g.stroke();
+  g.strokeStyle = 'rgba(255,214,60,1)'; g.lineWidth = 8; g.beginPath(); g.moveTo(12, 46); g.lineTo(32, 22); g.lineTo(52, 46); g.stroke();
 });
 boostTex.wrapS = boostTex.wrapT = THREE.RepeatWrapping;
 const boostMat = new THREE.MeshBasicMaterial({ map: boostTex, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-const forkSignTex = canvasTex(64, 64, (g) => {   // 갈림길 표지: 노란 동그라미 + 번개
+const forkSignTex = canvasTex(64, 64, (g) => {   // 갈림길 표지: 노란 동그라미 + "?" (어느 쪽이 빠른 길일까?)
   g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 32, 30, 0, Math.PI * 2); g.fill();
   g.fillStyle = '#ffd43b'; g.beginPath(); g.arc(32, 32, 25, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#e8590c'; g.beginPath(); g.moveTo(36, 10); g.lineTo(18, 36); g.lineTo(30, 36); g.lineTo(26, 54); g.lineTo(46, 26); g.lineTo(34, 26); g.closePath(); g.fill();
+  g.fillStyle = '#e8590c'; g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 32, 35);
 });
 
 // 폭포 물줄기 / 폭포 아래 거품
@@ -454,8 +454,8 @@ function sampleTrack(def) {
   const push = (p, slope = 0, flags = {}) => {
     const fx = -Math.sin(th), fz = -Math.cos(th);
     out.push({ x, y, z, tx: fx, tz: fz, nx: fz, nz: -fx, d, slope,   // n = 진행 방향의 왼쪽
-      fall: p.t === 'F', ramp: !!flags.ramp, gap: !!flags.gap,
-      fork: !!p.fork, fside: p.fork ? p.fside : 0, ih: flags.ih || 0,   // 🔀 갈림길: 가운데 섬 반폭(ih), 빠른 쪽(fside)
+      fall: p.t === 'F' || !!flags.fall, lift: !!flags.lift, ramp: !!flags.ramp, gap: !!flags.gap,
+      fork: !!p.fork, fside: p.fork ? p.fside : 0, ih: flags.ih || 0, ic: flags.ic || 0, fast: !!flags.fast,   // 🔀 갈림길: 가운데 섬 반폭(ih), 빠른 쪽(fside)
       w: (p.w || def.width) / 2,
       wl: p.walls === 'both' || p.walls === 'L',
       wr: p.walls === 'both' || p.walls === 'R' });
@@ -475,6 +475,12 @@ function sampleTrack(def) {
         else { y = y0; push(p, 0, { gap: true }); }
         continue;
       }
+      if (p.t === 'V') {   // 🎢 골짜기: 앞 35% 는 깊은 폭포, 뒤 65% 는 물 엘리베이터로 다시 올라감
+        const u = (i + 1) / n, A = 0.35;
+        if (u <= A) { const v = u / A; y = y0 - p.depth * v * v * (3 - 2 * v); push(p, p.depth * 6 * v * (1 - v) / (A * len), { fall: true }); }
+        else { const v = (u - A) / (1 - A); y = y0 - p.depth * (1 - v * v * (3 - 2 * v)); push(p, -p.depth * 6 * v * (1 - v) / ((1 - A) * len), { lift: true }); }
+        continue;
+      }
       if (p.t === 'F') { // 부드러운 S자 낙차 (가운데가 가장 가파름)
         const u = (i + 1) / n;
         y = y0 - p.drop * (u * u * (3 - 2 * u));
@@ -482,7 +488,8 @@ function sampleTrack(def) {
       }
       if (p.fork) {   // 섬은 앞뒤 끝이 뾰족하게 (물길이 넓어진 뒤에 시작)
         const dd = (i + 1) * ds, r = x => { const u = clamp((x - 2) / 3, 0, 1); return u * u * (3 - 2 * u); };
-        push(p, 0, { ih: p.ih * r(dd) * r(len - dd) });
+        const mid = clamp((dd / len - 0.38) / 0.17, 0, 1), sq = mid * mid * (3 - 2 * mid) * r(len - dd);
+        push(p, 0, { ih: p.ih * r(dd) * r(len - dd), ic: p.fside * 0.65 * sq, fast: dd / len > 0.45 && len - dd > 3.5 });
         continue;
       }
       push(p, slope);
@@ -641,6 +648,8 @@ function buildLevelWorld(def) {
     falls.push({ x: samples[e].x, y: samples[e].y, z: samples[e].z, s: samples[e] });
   }
 
+  // 🎢 물 엘리베이터: 골짜기 오르막에 위로 흐르는 화살표 (물살이 오리를 밀어 올림)
+  for (const [a, b] of runs(samples, 'lift')) group.add(ribbon(samples, a, b, s => s.w - 0.15, 0.05, s => -s.w + 0.15, 0.05, boostMat, 1.1));
   // 아치 다리 기둥
   const pillarGeo = new THREE.CylinderGeometry(0.55, 0.75, 1, 10);
   for (let i = 10; i < N - 10; i += 28) {
@@ -814,18 +823,20 @@ function buildLevelWorld(def) {
   // 🔀 갈림길(레벨 16~): 가운데 잔디 섬. 한쪽은 ⚡빠른 물살(바깥 난간 없음), 반대쪽은 느리지만 안전
   for (const [a, b] of runs(samples.map(s => ({ x: s.ih > 0.01 })), 'x')) {
     const fs = samples[Math.floor((a + b) / 2)].fside;
-    add(ribbon(samples, a, b, s => s.ih, 0.32, s => -s.ih, 0.32, toon(0x8fd67a, { side: THREE.DoubleSide })));
-    add(ribbon(samples, a, b, s => s.ih, -0.05, s => s.ih, 0.32, stoneMat()));
-    add(ribbon(samples, a, b, s => -s.ih, -0.05, s => -s.ih, 0.32, stoneMat()));
-    group.add(ribbon(samples, a, b, s => fs * (s.ih + 0.1), 0.045, s => fs * (s.w - 0.1), 0.045, boostMat, 1.3));
+    add(ribbon(samples, a, b, s => s.ic + s.ih, 0.32, s => s.ic - s.ih, 0.32, toon(0x8fd67a, { side: THREE.DoubleSide })));
+    add(ribbon(samples, a, b, s => s.ic + s.ih, -0.05, s => s.ic + s.ih, 0.32, stoneMat()));
+    add(ribbon(samples, a, b, s => s.ic - s.ih, -0.05, s => s.ic - s.ih, 0.32, stoneMat()));
+    // ⚡ 화살표는 섬 중간(빠른 쪽이 좁아지는 곳)부터 → 입구에서는 어느 쪽이 빠른지 모름
+    for (const [fa, fb] of runs(samples.map((q, k) => ({ x: k >= a && k <= b && q.fast })), 'x'))
+      group.add(ribbon(samples, fa, fb, q => q.ic + fs * (q.ih + 0.1), 0.045, q => fs * (q.w - 0.1), 0.045, boostMat, 1.3));
     for (let i = a + 8, j = 0; i < b - 8; i += 7, j++) {   // 섬 위 덤불·꽃
       const sm = samples[i];
       if (sm.ih < 0.45) continue;
       if (j % 3 === 1) {
         const bush = new THREE.Mesh(sphLow, toon(0x5fbf5a)); bush.scale.set(0.42, 0.32, 0.42);
-        bush.position.set(sm.x, sm.y + 0.4, sm.z); bush.castShadow = true; group.add(bush);
+        bush.position.set(sm.x + sm.nx * sm.ic, sm.y + 0.4, sm.z + sm.nz * sm.ic); bush.castShadow = true; group.add(bush);
       } else for (const sg of [1, -1]) {
-        const o = sg * sm.ih * 0.45, fl = new THREE.Mesh(sphLow, toon([0xff9fb6, 0xffffff, 0xffd84d][(j + (sg > 0 ? 1 : 0)) % 3]));
+        const o = sm.ic + sg * sm.ih * 0.45, fl = new THREE.Mesh(sphLow, toon([0xff9fb6, 0xffffff, 0xffd84d][(j + (sg > 0 ? 1 : 0)) % 3]));
         fl.scale.setScalar(0.1); fl.position.set(sm.x + sm.nx * o, sm.y + 0.42, sm.z + sm.nz * o); group.add(fl);
       }
     }
@@ -833,7 +844,7 @@ function buildLevelWorld(def) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.1, 6), toon(0x9b6a3c));
     post.position.set(sn.x, sn.y + 0.85, sn.z); post.castShadow = true; group.add(post);
     const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: forkSignTex, transparent: true, depthWrite: false }));
-    sign.scale.setScalar(0.75); sign.position.set(sn.x + sn.nx * fs * 0.25, sn.y + 1.55, sn.z + sn.nz * fs * 0.25); group.add(sign);
+    sign.scale.setScalar(0.75); sign.position.set(sn.x, sn.y + 1.55, sn.z); group.add(sign);
   }
 
   // ---------- 장애물 ----------
@@ -841,7 +852,7 @@ function buildLevelWorld(def) {
   // 아이템·아기 오리·폭포 근처와 코너는 피해서 직선 구간에 놓음
   const busy = [];
   items.forEach(it => busy.push(it.idx)); babies.forEach(b => busy.push(b.idx));
-  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap || sm.fork) busy.push(i); });
+  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap || sm.fork || sm.lift) busy.push(i); });
   const straightAt = i => { const a = samples[Math.max(0, i - 10)], b = samples[Math.min(N - 1, i + 10)]; return a.tx * b.tx + a.tz * b.tz > 0.97; };
   // i 주변(±10)에 난간이 있는지: side = 1(왼쪽), -1(오른쪽), 0(양쪽)
   const walledAt = (i, side = 0) => {
@@ -972,11 +983,32 @@ function buildLevelWorld(def) {
     group.add(g);
     mills.push({ g, wheel, s: sm, x: sm.x, y: sm.y, z: sm.z, R, H, w: sm.w, omega: 1.0 + rng() * 0.3, phase: rng() * 6, theta: 0, idx: i, hitT: -9 });
   }
+  // 🔀 갈림길의 안전한(느린) 길에는 장애물을 더: 소용돌이 + 왔다 갔다 하는 꽃게
+  let forkExtra = 0;
+  for (const [a, b] of runs(samples.map(q => ({ x: q.fast })), 'x')) {
+    const fs = samples[a].fside, sg = -fs;
+    const laneW = q => q.w - q.ih - sg * q.ic, laneC = q => (q.ic + sg * q.ih + sg * q.w) / 2;
+    { // 소용돌이: 안전한 길 한쪽에 붙어서 (반대쪽으로 비켜 갈 수 있음)
+      const i = a + Math.round((b - a) * 0.22), sm = samples[i], R = Math.min(0.85, laneW(sm) * 0.3);
+      const off = laneC(sm) + (rng() < 0.5 ? 1 : -1) * (laneW(sm) / 2 - R - 0.05);
+      const x = sm.x + sm.nx * off, z = sm.z + sm.nz * off;
+      const m = new THREE.Mesh(new THREE.CircleGeometry(R, 32), whirlMat);
+      m.rotation.x = -Math.PI / 2; m.position.set(x, sm.y + 0.045, z); group.add(m);
+      whirls.push({ m, x, z, y: sm.y, R, idx: i, lat: off, inside: false });
+    }
+    { // 꽃게: 안전한 길 안에서만 좌우로
+      const i = a + Math.round((b - a) * 0.72), sm = samples[i], c = makeCrab();
+      c.rotation.y = Math.atan2(sm.tx, sm.tz); group.add(c);
+      crabs.push({ g: c, s: sm, c: laneC(sm), amp: Math.max(0.2, laneW(sm) / 2 - 0.5), speed: 1.6 + rng() * 0.8, phase: rng() * 6, x: sm.x, y: sm.y, z: sm.z, lat: 0, idx: i, hitT: -9 });
+    }
+    forkExtra += 3;
+  }
   // ⚡ 가속 물살 패드(레벨 8~): 양쪽 난간 있는 직선에 화살표 물살. 지나가면 잠깐 쌩~
   const nBoost = levelNo < 8 ? 0 : Math.min(4, 1 + Math.floor((levelNo - 8) / 12));   // 8:1, 20:2, 32:3, 44~: 4
   const boosts = [];
-  for (const i of pickSpots(nBoost, 18, i => walledAt(i))) {
-    const sm = samples[i], hw = Math.min(0.62, sm.w * 0.42), off = (rng() - 0.5) * 2 * (sm.w - hw - 0.25);
+  for (const i of pickSpots(nBoost, 14, i => walledAt(i, 1) || walledAt(i, -1), shortStraight)) {   // 패드가 붙는 쪽에 난간이 있으면 됨
+    const L = walledAt(i, 1), R = walledAt(i, -1), sd = L && R ? (rng() < 0.5 ? 1 : -1) : L ? 1 : -1;
+    const sm = samples[i], hw = Math.min(0.62, sm.w * 0.42), off = sd * (sm.w - hw - 0.12);   // 길 왼쪽이나 오른쪽 가장자리(난간 쪽)에 붙어서
     group.add(ribbon(samples, i - 5, i + 5, () => off + hw, 0.045, () => off - hw, 0.045, boostMat, 1.3));
     boosts.push({ idx: i, off, hw, hitT: -9 });
   }
@@ -995,7 +1027,7 @@ function buildLevelWorld(def) {
     const g = makeFrog(); g.scale.setScalar(1.4); g.position.set(x, sm.y + 0.05, z); g.rotation.y = Math.atan2(sm.tx, sm.tz); group.add(g);
     frogs.push({ g, pad, x, y: sm.y + 0.05, z, idx: i, s: sm, sg, state: 'sit', vx: 0, vy: 0, vz: 0, phase: rng() * 6 });
   }
-  limit += Math.ceil(nFount * 2.5 + logCount * 1.2 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
+  limit += Math.ceil(forkExtra + nFount * 2.5 + logCount * 1.2 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5);   // 장애물 때문에 늦어지는 만큼 더
   limit = Math.ceil(limit * 0.85 * (1 + 0.12 * clamp((levelNo - 6) / 30, 0, 1)));   // 15% 줄임. 대신 길이 좁고 난간 없는 곳이 많아진 만큼 최대 12% 돌려줌
 
   // 🌙 밤: 호수 위에 반짝이는 별빛 (반사)
@@ -1771,13 +1803,14 @@ function physicsStep(dt) {
   // 옆 물살: 물길을 따라 좌우로 천천히 바뀌는 흐름 (레벨이 오를수록 강해짐)
   // ⚡ 빨라지는 물살: 가속 패드를 밟았거나 갈림길의 빠른 쪽. 갈림길의 안전한 쪽은 조금 느림
   let flowMul = 1;
-  if (s.ih > 0.3 && s.fside) {
-    const fast = P.lat * s.fside > 0;
+  if (s.fast && s.fside) {
+    const fast = (P.lat - s.ic) * s.fside > 0;
     if (fast) { P.boostT = Math.max(P.boostT, 0.35); if (!P.inFast) Sfx.whoosh(); }
-    else flowMul = 0.88;
+    else flowMul = 0.78;   // 안전한 길은 확실히 느림
     P.inFast = fast;
   } else P.inFast = false;
   if (P.boostT > 0) flowMul = 1 + BOOST_K * Math.min(1, P.boostT / 0.35);
+  if (s.lift) flowMul = Math.max(flowMul, 1.35);   // 🎢 물 엘리베이터
   const flow = def.flow * flowMul;
   const cross = (def.cross || 0) * Math.sin(s.d * 0.32 + 1.3) * Math.min(1, s.d / 8);
   const flowK = 1 - 0.85 * Math.min(1, whirlK * 2.5);
@@ -1791,6 +1824,10 @@ function physicsStep(dt) {
       const slow = 1 - 3.2 * Math.min(1, k * 2) * dt; P.vx *= slow; P.vz *= slow;
       if (!w.inside) { w.inside = true; Sfx.whoosh(); stats.whirls++; }
     } else w.inside = false;
+  }
+  if (s.lift) {   // 🎢 오르막: 내리막에서 붙은 속도가 중력에 깎이듯 줄어듦 (너무 빨리 튀어 나가지 않게)
+    const va = P.vx * s.tx + P.vz * s.tz, cap = def.flow * 1.5;
+    if (va > cap) { const k = (va - cap) * Math.min(1, 3.5 * dt); P.vx -= s.tx * k; P.vz -= s.tz * k; }
   }
   if (s.slope > 0) { // 폭포 경사: 앞으로 쭉 미끄러지며 빨라짐
     P.vx += s.tx * s.slope * FALL_BOOST * dt; P.vz += s.tz * s.slope * FALL_BOOST * dt;
@@ -1840,9 +1877,9 @@ function physicsStep(dt) {
   }
   // 🔀 갈림길 가운데 섬: 섬에 들어서기 전에 있던 쪽 길로만 다님 (섬에 부딪히면 튕김)
   if (s.ih > 0.02) {
-    const sg = P.forkSide || (lat >= 0 ? 1 : -1), lim2 = s.ih + DUCK_R, over = lim2 - lat * sg;
+    const sg = P.forkSide || (lat >= 0 ? 1 : -1), lim2 = s.ih + DUCK_R, over = lim2 - (lat - s.ic) * sg;
     if (over > 0) {
-      P.x += s.nx * sg * over; P.z += s.nz * sg * over; lat = sg * lim2;
+      P.x += s.nx * sg * over; P.z += s.nz * sg * over; lat = s.ic + sg * lim2;
       const vn = -(P.vx * s.nx + P.vz * s.nz) * sg;
       if (vn > 0) {
         P.vx += s.nx * sg * vn * (1 + WALL_REST); P.vz += s.nz * sg * vn * (1 + WALL_REST);
@@ -1856,7 +1893,7 @@ function physicsStep(dt) {
     if (Math.abs(P.idx - b.idx) > 5 || Math.abs(lat - b.off) > b.hw + 0.2) continue;
     if (elapsed - b.hitT > 1) {
       Sfx.whoosh(); burst(P.x, P.y + 0.2, P.z, 10, 2, 0.07, 0.45);
-      P.vx += s.tx * 1.5; P.vz += s.tz * 1.5;
+      P.vx += s.tx * 1.5; P.vz += s.tz * 1.5; stats.boosts++;
       if (P.boostT < 0.5) showToast(t('boostToast'), 900);
     }
     b.hitT = elapsed; P.boostT = BOOST_T;
@@ -1980,7 +2017,7 @@ function startFall(keepVy) {
 }
 // ---------- 미션: 레벨마다 3개, 성공한 미션 하나당 별 1개 ----------
 // 한 번 성공한 미션은 저장되어 계속 별로 남음 (나머지는 다음 도전에서 채우면 됨)
-const stats = { falls: 0, bumps: 0, logHits: 0, crabHits: 0, whirls: 0, items: 0, millHits: 0, jumpFails: 0, fountains: 0 };
+const stats = { boosts: 0, falls: 0, bumps: 0, logHits: 0, crabHits: 0, whirls: 0, items: 0, millHits: 0, jumpFails: 0, fountains: 0 };
 const FOUNTAIN_HOLD = 1.5; // 분수 위에 떠 있는 시간(초)
 function resetStats() { for (const k in stats) stats[k] = 0; }
 function missionsFor(n, W) {
@@ -1996,7 +2033,7 @@ function missionsFor(n, W) {
     if (W.samples.some(s => s.gap)) extra.push({ id: 'jump' });
     if (W.crabs.length) extra.push({ id: 'crab' });
     if (W.whirls.length) extra.push({ id: 'whirl' });
-    if (W.logs.length) extra.push({ id: 'log' });
+    if (W.boosts.length) extra.push({ id: 'boost', v: Math.min(2, W.boosts.length) });   // (예전 '통나무 안 부딪히기'는 너무 어려워서 바꿈)
     if (W.items.length) extra.push({ id: 'item' });
     if (!extra.length) extra.push({ id: 'bumps', v: 3 });
   }
@@ -2013,7 +2050,7 @@ function missionDone(m, tm) {
     case 'mill': return stats.millHits === 0;
     case 'jump': return stats.jumpFails === 0;
     case 'whirl': return stats.whirls === 0;
-    case 'log': return stats.logHits === 0;
+    case 'boost': return stats.boosts >= m.v;
     case 'item': return stats.items > 0;
     case 'bumps': return stats.bumps <= m.v;
   }
@@ -2679,7 +2716,7 @@ function tick(dt) {
       }
     }
     for (const c of world.crabs) {                                                                    // 꽃게 옆걸음
-      c.lat = Math.sin(elapsed * c.speed + c.phase) * c.amp;
+      c.lat = (c.c || 0) + Math.sin(elapsed * c.speed + c.phase) * c.amp;
       c.x = c.s.x + c.s.nx * c.lat; c.z = c.s.z + c.s.nz * c.lat;
       c.g.position.set(c.x, c.y + 0.02 + Math.abs(Math.sin(elapsed * 9 + c.phase)) * 0.05, c.z);
       for (const ch of c.g.children) if (ch.userData.sx) ch.rotation.z = ch.userData.sx * Math.sin(elapsed * 7 + c.phase) * 0.35;

@@ -15,6 +15,8 @@ function F(drop, len) { return { t: 'F', len: len || Math.max(1.8, drop * 1.25),
 // J: 점프대 (경사로 2.0 → 끊어진 물길 3.8). 속도를 내서 날아가야 건너감
 function J() { return { t: 'J', len: 5.8, ramp: 2.0, gap: 3.8, h: 0.7, walls: 'both' }; }
 // K: 갈림길 (가운데 섬이 물길을 둘로 나눔). side 쪽(1=왼쪽, -1=오른쪽)은 ⚡빠른 물살 + 바깥 난간 없음, 반대쪽은 느리지만 안전
+// V: 깊은 골짜기 폭포 (깊이 쑥 떨어졌다가 물 엘리베이터를 타고 다시 원래 높이로 올라옴)
+function V(depth) { return { t: 'V', len: +(depth * 3.3 + 3).toFixed(2), depth, walls: 'both' }; }
 function K(len, side, w, ih) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih }; }
 
 let LEVELS = [
@@ -180,6 +182,9 @@ function courseOverlaps(def, checkPond = true) {
     const forks = n < 16 ? 0 : n < 36 ? 1 : 2;
     const forkAfter = forks === 1 ? [Math.round(n * 0.62)] : forks === 2 ? [Math.round(n * 0.34), Math.round(n * 0.8)] : [];
     let ki = 0;
+    // 🎢 골짜기 폭포: 레벨 14부터 코스 40% 쯤에 1개. 호수(수면) 위로 1.3 이상 남는 만큼만 깊게
+    const dipAt = n < 14 ? -1 : Math.round(n * 0.4);
+    let dipped = false;
     const cw = (turn, long) => {                 // 코너 난간 (U턴·둥근 커브처럼 긴 커브는 바깥 난간은 항상 있음)
       const outer = turn > 0 ? 'R' : 'L';
       const w = rng() < 0.65 - 0.45 * k ? 'both' : (rng() < 0.6 ? outer : 'none');   // 난이도↑: 양쪽 난간 코너 줄임
@@ -228,8 +233,13 @@ function courseOverlaps(def, checkPond = true) {
       while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; jumped = true; }
       if (!jumped && ki < forkAfter.length && forkAfter[ki] <= c && c < n) {
         const fs = frng() < 0.5 ? 1 : -1, fw = +(width0 * 1.75 + 1.2).toFixed(2), ih = +(0.075 * width0 + 0.6).toFixed(2);
-        pieces.push(S(3, 'both'), K(+(15 + frng() * 4).toFixed(1), fs, fw, ih), S(3, 'both'));
+        pieces.push(S(3, 'both'), K(+(20 + frng() * 4).toFixed(1), fs, fw, ih), S(3, 'both'));
         ki++;
+      } else if (!jumped && !dipped && dipAt > 0 && c >= dipAt && c < n) {
+        const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);
+        const depth = Math.min(3.5 + 4 * Math.min(1, (n - 14) / 30) + frng(), yNow - lakeY - 1.3);
+        if (depth >= 2.5) pieces.push(S(3, 'both'), V(+depth.toFixed(2)), S(6, 'both'));
+        dipped = true;
       }
       const len = n <= 20 ? 4 + rng() * 4 : n <= 40 ? 3 + rng() * 3 : 2.5 + rng() * 2.5;   // 코너가 많을수록 직선은 짧게
       if (c < n && rng() < 0.42 + 0.33 * k) pieces.push(S(len * 1.15, 'none'), S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
