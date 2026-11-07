@@ -207,6 +207,7 @@ h1 {
 .mission-list { display: flex; flex-direction: column; gap: 4px; margin: 10px auto 0; text-align: left; font-size: 15px; width: fit-content; max-width: 100%; }
 .mission-list > span { opacity: .55; }
 .mission-list > span.ok { opacity: 1; }
+.play-time { margin-top: 2px; font-size: 13px; opacity: .7; text-align: center; }
 .saved-stars { display: block; margin-top: 8px; font-size: 14px; opacity: .8; }
 .level-btn { gap: 2px; }
 .popup-panel { max-height: calc(100cqh - 32px); overflow-y: auto; touch-action: pan-y; }

@@ -1231,7 +1231,9 @@ const snowCapMat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gr
 function decorateBiome(id, group, samples, rng, add) {
   const N = samples.length;
   // 물길에서 충분히 떨어진 자리만 (r = 장식 반지름)
-  const farFromTrack = (x, z, r) => { for (let j = 0; j < N; j += 4) { const sm = samples[j]; if ((sm.x - x) ** 2 + (sm.z - z) ** 2 < (r + sm.w + 2) ** 2) return false; } return true; };
+  // 도착 섬(연못 + 가족)과 도착 후 빙 도는 카메라 길에도 안 겹치게: 섬 반지름 약 9 + 카메라 거리 여유
+  const eS = samples[N - 1], pcx = eS.x + eS.tx * 4.8, pcz = eS.z + eS.tz * 4.8;
+  const farFromTrack = (x, z, r) => { if ((x - pcx) ** 2 + (z - pcz) ** 2 < (r + 11.5) ** 2) return false; for (let j = 0; j < N; j += 4) { const sm = samples[j]; if ((sm.x - x) ** 2 + (sm.z - z) ** 2 < (r + sm.w + 2) ** 2) return false; } return true; };
   const trackDist = (x, z) => { let d = 1e9; for (let j = 0; j < N; j += 4) d = Math.min(d, Math.hypot(samples[j].x - x, samples[j].z - z)); return d; };
   // 물길 가까이 있는 큰 장식은 물길보다 낮게 (앞길을 가리지 않게). 멀리 있는 것만 높게 솟을 수 있음
   const maxTop = (x, z, r, want) => { const d = trackDist(x, z) - r; const trackH = -W - 1.2; return d < 16 ? Math.min(want, Math.max(1.5, trackH)) : want; };
@@ -2663,6 +2665,10 @@ function tick(dt) {
   } else acc = 0;
 
   if (state === 'falling' || state === 'respawning') timeT += dt;   // 떨어진 동안에도 시간은 흐름
+  if (state === 'playing' || state === 'falling' || state === 'respawning') {   // ⏱ 누적 플레이 시간 (10초마다 저장)
+    save.playTime = (save.playTime || 0) + dt;
+    if ((playSaveT += dt) >= 10) { playSaveT = 0; persist(); }
+  }
   // 방패: 남은 시간 줄이기 + 벽 보이기 (끝나기 1.5초 전부터 깜빡)
   if (state === 'playing' && shieldT > 0) shieldT = Math.max(0, shieldT - dt);
   updateHeartItem(dt);
@@ -2896,9 +2902,11 @@ function startLevel(i) {
   } else hint.classList.add('hidden');
 }
 
+let playSaveT = 0;
 function pauseGame() {
   if (state !== 'playing' && state !== 'countdown') return;
   const prev = state; state = 'paused';
+  persist();
   showPauseMenu(prev);
 }
 function showPauseMenu(prev) {
@@ -2929,6 +2937,9 @@ function showPauseMenu(prev) {
     row.appendChild(b);
   }
   $('#popButtons').appendChild(row);
+  const pt = document.createElement('div');   // ⏱ 누적 플레이 시간: 맨 아래
+  pt.className = 'play-time'; pt.textContent = t('playTime', save.playTime || 0);
+  $('#popButtons').appendChild(pt);
 }
 const musicLabel = () => Sfx.isMusicOn() ? t('musicOn') : t('musicOff');
 
