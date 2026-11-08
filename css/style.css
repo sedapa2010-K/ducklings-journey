@@ -333,6 +333,9 @@ h1 {
 /* 마지막 레벨: 화면이 도는 동안 아래쪽에 뜨는 결과 보기 버튼 */
 .final-result { position: absolute; left: 0; right: 0; width: max-content; bottom: 9cqh; z-index: 20; animation: pop .4s both cubic-bezier(.2, 1.6, .4, 1); }
 .final-result.hidden { display: none; }
+.final-result { padding-top: 10px; padding-bottom: 10px; }   /* START 버튼처럼 높이 낮게 */
+.hint.in-race { top: calc(max(12px, env(safe-area-inset-top)) + 180px); }   /* 레이스: 상태바 아래로 */
+.hint.in-race + .countdown { top: 40%; }   /* 레이스: 카운트다운 숫자가 알림과 겹치지 않게 */
 
 /* 결과·일시정지 팝업은 조금 촘촘하게 (새 꾸미기 알림이 붙어도 스크롤 없이) */
 .popup-panel { padding: 18px 18px 16px; }

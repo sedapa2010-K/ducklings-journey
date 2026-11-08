@@ -10,7 +10,7 @@ const I18N = {
     slideToast: '🛝 급류 슬라이드! 코인을 모아요', jumpBull: c => `🎯 정중앙! 🪙+${c}`, jumpGood: c => `🎯 명중! 🪙+${c}`, jumpOk: c => `🎯 과녁 안! 🪙+${c}`, jumpLand: '🎯 착지 성공! 다음엔 과녁 가운데로',
     stoneToast: '🪨 징검다리! 돌 위치에 맞춰 좌우로 폴짝',
     raceReady: n => `🏁 ${n}와 레이스! 가속 물살을 밟아요`, raceWin: c => `🏆 승리! 🪙+${c}`, raceLose: '아깝다! 다음엔 이길 수 있어요', rival_kid: '🐥 꼬마 경주 오리', rival_bolt: '😎 번개 오리', rival_champ: '👑 챔피언 오리',
-    raceName: k => `🏁 레이스 ${k}`, raceLocked: n => `Lv.${n} 클리어`, raceBest: p => `최고 ${p}등`, placeHud: (p, n) => `${p}등/${n}`, placeBig: (p, n) => `${p}등! (${n}마리 중)`, raceDone: k => `레이스 ${k} 완주!`, hintRace: n => `🏁 오리 ${n}마리 레이스! 폭포·점프대·가속 물살을 타고 1등을 노려요`, m_place: v => `🏁 ${v}등 안에 들기`, m_win: () => '🥇 1등 하기',
+    raceName: k => `🏁 레이스 ${k}`, raceLocked: n => `Lv.${n} 클리어`, raceBest: p => `최고 ${p}등`, placeHud: (p, n) => `${p}/${n}`, placeBig: (p, n) => `${p}등! (${n}마리 중)`, raceDone: k => `레이스 ${k} 완주!`, hintRace: n => `🏁 오리 ${n}마리 레이스! 폭포·점프대·가속 물살을 타고 1등을 노려요`, m_place: v => `🏁 ${v}등 안에 들기`, m_win: () => '🥇 1등 하기',
     ringToast: '💫 링 통과! 🪙+2', cliffHint: '⛰️ 절벽! 빠르게 달려가면 웅덩이를 건너뛰어요', cliffFast: '💨 쌩~ 웅덩이를 통통 건너뛰었어요!', cliffSlow: '🌊 풍덩! 깊은 물에 잠깐 빠졌어요', icebergWarn: '🧊 뒤에서 빙산이 와요! 옆으로 피해요', icebergHit: h => `🧊 쿵! 하트 -½ (남은 하트 ${h}개)`, waveToast: '🌊 파도에 맞으면 느려져요! 반대쪽으로 피해요', bigWaveToast: '🌊🌊 큰 파도! 꽈당~',
     thSystem: '⚙️ 시스템', thDay: '☀️ 낮', thSunset: '🌅 노을', thNight: '🌙 밤',
     levelSelect: '레벨 선택', continuePlay: n => `▶ 이어하기`, crabToast: h => `🦀 꼬집혔어요! 하트 -½ (남은 하트 ${h}개)`, diffNormal: '🙂 보통', diffHard: '🔥 어려움',
