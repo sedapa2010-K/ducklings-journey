@@ -28,39 +28,57 @@ function draw(size, mode) {
   // 모양 좌표는 0~1. fg(적응형 아이콘 앞면)·splash 는 가운데로 줄여서 안전 영역 안에
   const k = mode === 'fg' ? 0.6 : mode === 'splash' ? 0.9 : 1, off = (1 - k) / 2;
   const X = v => (off + v * k) * W, R = v => v * k * W;
-  const ellipse = (cx, cy, rx, ry, col) => {
-    const c = hex(col), x0 = Math.max(0, Math.floor(X(cx) - R(rx))), x1 = Math.min(W - 1, Math.ceil(X(cx) + R(rx)));
-    const y0 = Math.max(0, Math.floor(X(cy) - R(ry))), y1 = Math.min(W - 1, Math.ceil(X(cy) + R(ry)));
+  // 정규화 좌표(0~1)에서 test(u, v)가 참인 곳을 칠함 (bbox 안만 검사)
+  const fill = (bx0, by0, bx1, by1, test, col, alpha = 1) => {
+    const c = hex(col);
+    const x0 = Math.max(0, Math.floor(X(bx0))), x1 = Math.min(W - 1, Math.ceil(X(bx1))), y0 = Math.max(0, Math.floor(X(by0))), y1 = Math.min(W - 1, Math.ceil(X(by1)));
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      const dx = (x + 0.5 - X(cx)) / R(rx), dy = (y + 0.5 - X(cy)) / R(ry);
-      if (dx * dx + dy * dy <= 1) blend((y * W + x) * 4, c, 1);
+      const u = ((x + 0.5) / W - off) / k, v = ((y + 0.5) / W - off) / k;
+      if (test(u, v)) blend((y * W + x) * 4, c, alpha);
     }
   };
-  const outlined = (cx, cy, rx, ry, col, t = 0.022) => { ellipse(cx, cy, rx + t, ry + t, 0x5a4632); ellipse(cx, cy, rx, ry, col); };
-  // 배경: 하늘 → 물 (앞면/시작 화면은 투명)
+  const ellipse = (cx, cy, rx, ry, col, rot = 0, alpha = 1) => {
+    const cs = Math.cos(rot), sn = Math.sin(rot), m = Math.max(rx, ry);
+    fill(cx - m, cy - m, cx + m, cy + m, (u, v) => { const dx = u - cx, dy = v - cy, a = (dx * cs + dy * sn) / rx, b = (-dx * sn + dy * cs) / ry; return a * a + b * b <= 1; }, col, alpha);
+  };
+  const INK = 0x5a4632;
+  const outlined = (cx, cy, rx, ry, col, t = 0.02, rot = 0) => { ellipse(cx, cy, rx + t, ry + t, INK, rot); ellipse(cx, cy, rx, ry, col, rot); };
+  const heart = (cx, cy, r, col) => fill(cx - r * 1.3, cy - r * 1.3, cx + r * 1.3, cy + r * 1.3, (u, v) => { const x = (u - cx) / r, y = -(v - cy) / r + 0.15; const q = x * x + y * y - 1; return q * q * q - x * x * y * y * y <= 0; }, col);
+  const sparkle = (cx, cy, r, col) => fill(cx - r, cy - r, cx + r, cy + r, (u, v) => { const x = Math.abs(u - cx) / r, y = Math.abs(v - cy) / r; return Math.sqrt(x) + Math.sqrt(y) <= 1; }, col);
+  // 배경: 파스텔 하늘 → 물 (앞면/시작 화면은 투명)
   if (mode === 'full' || mode === 'round') {
     for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
-      const v = y / W, col = v < 0.7 ? [191 - v * 40, 230 - v * 20, 255] : [79, 168, 232];
+      const v = y / W, t = Math.min(1, v / 0.72);
+      const col = v < 0.74 ? [255 - t * 70, 226 + t * 6, 240 + t * 15] : [104, 190, 240];   // 분홍빛 하늘 → 하늘색, 아래는 물
       if (mode === 'round') { const dx = x / W - 0.5, dy = y / W - 0.5; if (dx * dx + dy * dy > 0.25) continue; }
       else { const r = 0.2, cx = Math.min(Math.max(x / W, r), 1 - r), cy = Math.min(Math.max(y / W, r), 1 - r); if ((x / W - cx) ** 2 + (y / W - cy) ** 2 > r * r) continue; }
       blend((y * W + x) * 4, col, 1);
     }
-    for (const [cx, cy] of [[0.2, 0.82], [0.62, 0.88], [0.86, 0.79]]) ellipse(cx, cy, 0.09, 0.018, 0xbfe9ff);   // 물결
+    for (const [cx, cy] of [[0.14, 0.86], [0.86, 0.9]]) ellipse(cx, cy, 0.08, 0.016, 0xd6f2ff);   // 물결
+    sparkle(0.16, 0.2, 0.06, 0xffffff); sparkle(0.84, 0.3, 0.045, 0xfff3a8); sparkle(0.12, 0.5, 0.03, 0xffffff);
+    heart(0.84, 0.13, 0.055, 0xff7fa8);
   }
-  // 오리 (튜브 낀 귀여운 아기 오리)
-  outlined(0.53, 0.68, 0.33, 0.085, 0xe8323c, 0.02);                  // 빨간 튜브
-  for (const sx of [0.32, 0.53, 0.74]) ellipse(sx, 0.69, 0.045, 0.07, 0xffffff);
-  outlined(0.55, 0.6, 0.27, 0.17, 0xffd84d);                          // 몸통
-  outlined(0.62, 0.58, 0.1, 0.07, 0xf2b01e, 0.016);                   // 날개
-  outlined(0.45, 0.4, 0.2, 0.19, 0xffd84d);                           // 머리
-  outlined(0.47, 0.205, 0.028, 0.06, 0xffd84d, 0.014);                // 머리 깃털
-  outlined(0.255, 0.45, 0.085, 0.042, 0xff9a3c, 0.016);               // 부리
-  ellipse(0.37, 0.37, 0.036, 0.045, 0x2b1d14);                        // 눈
-  ellipse(0.357, 0.355, 0.014, 0.014, 0xffffff);
-  ellipse(0.53, 0.37, 0.036, 0.045, 0x2b1d14);
-  ellipse(0.517, 0.355, 0.014, 0.014, 0xffffff);
-  ellipse(0.32, 0.47, 0.04, 0.022, 0xff8fab);                         // 볼터치
-  ellipse(0.59, 0.47, 0.04, 0.022, 0xff8fab);
+  // 🐥 정면을 보는 통통한 아기 오리 + 튜브
+  outlined(0.5, 0.8, 0.37, 0.1, 0xff5a64, 0.02);                      // 튜브
+  for (const sx of [0.2, 0.5, 0.8]) ellipse(sx, 0.81, 0.05, 0.075, 0xffffff);
+  outlined(0.23, 0.66, 0.08, 0.05, 0xffc93c, 0.018, -0.7);            // 날개 (양옆으로 파닥)
+  outlined(0.77, 0.66, 0.08, 0.05, 0xffc93c, 0.018, 0.7);
+  outlined(0.5, 0.7, 0.28, 0.16, 0xffdb4d);                           // 몸통
+  outlined(0.47, 0.17, 0.03, 0.065, 0xffdb4d, 0.014, -0.35);          // 머리 깃털 세 가닥
+  outlined(0.53, 0.165, 0.03, 0.07, 0xffdb4d, 0.014, 0.3);
+  outlined(0.5, 0.45, 0.29, 0.265, 0xffdb4d);                         // 큰 머리
+  ellipse(0.4, 0.29, 0.07, 0.035, 0xfff3b8, -0.5, 0.9);               // 머리 위 반짝 광택
+  // 큰 눈 + 반짝이 두 개
+  for (const ex of [0.385, 0.615]) {
+    ellipse(ex, 0.45, 0.058, 0.072, 0x2b1d14);
+    ellipse(ex - 0.018, 0.425, 0.024, 0.026, 0xffffff);
+    ellipse(ex + 0.02, 0.475, 0.011, 0.011, 0xffffff);
+  }
+  ellipse(0.3, 0.535, 0.055, 0.032, 0xff8fb0, 0, 0.85);               // 볼터치
+  ellipse(0.7, 0.535, 0.055, 0.032, 0xff8fb0, 0, 0.85);
+  outlined(0.5, 0.535, 0.075, 0.042, 0xff9a3c, 0.014);                // 동그란 부리 (웃는 입)
+  ellipse(0.5, 0.548, 0.05, 0.016, 0xe8742a);
+  ellipse(0.48, 0.52, 0.022, 0.01, 0xffc58a);
   // 4배 → 원래 크기로 줄이기
   const out = Buffer.alloc(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
