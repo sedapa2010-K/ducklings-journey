@@ -43,6 +43,11 @@ function V(depth) {
 function K(len, side, w, ih, fv = 'classic', ns = 0.38, sq = 0.65) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih, fv, ns, sq }; }
 // 🔀 갈림길 종류: 기본 / 긴 섬(장애물 3개, 빠른 길에 코인) / 짧은 섬(꽃게 1마리, 빠른 길에 코인) / 넓은 섬(꽃게 2마리)
 const FORK_KINDS = ['classic', 'long', 'short', 'wide'];
+// 🔀↪ 굽은 갈림길: 같은 길이로 bend(도)만큼 휘어짐. 빠른 쪽(난간 없음)이 커브 바깥 → 빠르게 가면 바깥으로 밀려 떨어질 수 있음
+function curveFork(k, bend) {
+  const a = Math.abs(bend) * Math.PI / 180;
+  return { ...k, t: 'C', angle: -k.fside * Math.abs(bend), radius: +(k.len / a).toFixed(2) };
+}
 function forkPiece(kind, fs, fw, ih, r) {
   if (kind === 'long') return K(+(30 + r * 4).toFixed(1), fs, fw, ih, kind, 0.28, 0.8);
   if (kind === 'short') return K(+(15 + r * 2).toFixed(1), fs, fw, ih, kind, 0.3, 0.55);
@@ -61,15 +66,15 @@ let LEVELS = [
     ],
   },
   {
-    name: '두근두근 물길',
+    name: '두근두근 물길',   // 좌우 반전: 왼쪽으로 먼저 꺾음
     flow: 2.4, width: 4.0, cross: 1.8,
     pieces: [
       S(10, 'both'),
-      C(-90, 6, 'both'),
+      C(90, 6, 'both'),
       S(5, 'both'),
       S(10, 'none'),
       S(4, 'both'),
-      C(90, 6, 'both'),
+      C(-90, 6, 'both'),
       S(6, 'both'),
       S(9, 'none'),
       S(5, 'both'),
@@ -93,20 +98,20 @@ let LEVELS = [
     ],
   },
   {
-    name: '코너 끝 낭떠러지',
+    name: '코너 끝 낭떠러지',   // 좌우 반전: 왼쪽으로 먼저 꺾음
     flow: 3.0, width: 3.6, cross: 2.2,
     pieces: [                       // 크게 휘는 둥근 커브 + 코너 직후 난간 없음
       S(9, 'both'),
-      C(-150, 7.5, 'both'),
+      C(150, 7.5, 'both'),
       S(7, 'none'),
       S(3, 'both'),
-      C(150, 7.5, 'both'),
-      S(8, 'none'),
-      S(3, 'both'),
-      C(-90, 5.5, 'L'),
+      C(-150, 7.5, 'both'),
       S(8, 'none'),
       S(3, 'both'),
       C(90, 5.5, 'R'),
+      S(8, 'none'),
+      S(3, 'both'),
+      C(-90, 5.5, 'L'),
       S(9, 'none'),
       S(4, 'both'),
     ],
@@ -279,7 +284,14 @@ function courseOverlaps(def, checkPond = true) {
       while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; jumped = true; }
       if (!jumped && ki < forkAfter.length && forkAfter[ki] <= c && c < n) {
         const fs = frng() < 0.5 ? 1 : -1, fw = +(width0 * 1.75 + 1.2).toFixed(2), ih = +(0.075 * width0 + 0.6).toFixed(2);
-        pieces.push(S(3, 'both'), forkPiece(forkKinds[ki], fs, fw, ih, frng()), S(3, 'both'));
+        let fk = forkPiece(forkKinds[ki], fs, fw, ih, frng());
+        const brng = seeded(n * 977 + ki * 31 + 3);   // 굽은 갈림길용 난수 (코스 나머지 모양은 그대로)
+        if (brng() < 0.75) {   // 4개 중 3개는 굽은 갈림길 (안 들어가면 곧은 갈림길)
+          const bent = curveFork(fk, 55 + brng() * 45);
+          const test = { width: 3.6, pieces: [...pieces, S(3, 'both'), bent, S(3, 'both'), S(8, 'both')] };
+          if (!courseOverlaps(test, false)) { fk = bent; heading = norm(heading + bent.angle); }
+        }
+        pieces.push(S(3, 'both'), fk, S(3, 'both'));
         ki++;
       } else if (!jumped && !dipped && dipAt > 0 && c >= dipAt && c < n) {
         const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);

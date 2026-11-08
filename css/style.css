@@ -340,3 +340,28 @@ h1 {
 /* 결과·일시정지 팝업은 조금 촘촘하게 (새 꾸미기 알림이 붙어도 스크롤 없이) */
 .popup-panel { padding: 18px 18px 16px; }
 .popup-panel h2 { margin-bottom: 8px; font-size: 27px; }
+
+/* 🛍️ 상점 */
+#shop { align-items: flex-end; }
+#shop .panel.sheet { position: relative; width: 100%; max-height: 55cqh; overflow-y: auto; touch-action: pan-y; padding: 12px 12px 12px; border-radius: 26px 26px 20px 20px; }
+.shop-head { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.shop-head h2 { font-size: 24px; margin: 0; }
+.shop-coins { background: #fff3c4; border-radius: 999px; padding: 3px 10px; font-size: 16px; }
+.shop-cat { font-size: 15px; margin: 8px 2px 4px; color: #8a6a4a; text-align: left; }
+.shop-grid { margin-bottom: 2px; }
+.look-btn.poor { opacity: .55; }
+.levels-bottom .shop-btn { margin-left: auto; }
+/* 레벨 선택: 레이스 버튼은 한 줄로 낮게, 아래 버튼들은 줄바꿈 없이 */
+.levels-bottom { gap: 5px; }
+.levels-bottom button { white-space: nowrap; }
+.levels-bottom #btnBackTitle { font-size: 13px; padding: 2px 2px; }
+.levels-bottom .shop-btn, .levels-bottom .wardrobe-btn { font-size: 13px; padding: 4px 8px; }
+.shop-head h2 { white-space: nowrap; font-size: 22px; }
+.shop-coins { white-space: nowrap; }
+
+/* 레이스 버튼: 한 줄로 낮게 (🏁 레이스 5  ★★☆ 최고 2등) */
+.race-row { gap: 4px; }
+.race-btn { flex-direction: row; flex-wrap: nowrap; justify-content: center; gap: 4px; padding: 4px 2px; min-width: 0; white-space: nowrap; letter-spacing: -0.4px; }
+.race-btn .rn { font-size: 12px; flex-shrink: 0; }
+.race-btn .rs { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; font-size: 10px; flex-shrink: 0; }
+.race-btn .rs .stars.small { font-size: 10px; gap: 0; padding: 0; margin: 0; background: none; box-shadow: none; }

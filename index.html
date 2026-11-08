@@ -70,8 +70,19 @@
     <div id="levelGrid" class="level-grid"></div>
     <div class="levels-bottom">
       <button id="btnBackTitle" class="ghost-btn" data-i18n="back">← 메인으로</button>
+      <button id="btnShop" class="pill-btn shop-btn" data-i18n="shop">🛍️ 상점</button>
       <button id="btnWardrobe" class="pill-btn wardrobe-btn">👗 꾸미기</button>
     </div>
+  </div>
+</section>
+
+<!-- 🛍️ 상점: 코인으로 물건을 사서 마지막 레벨 내 집 연못가를 꾸밈 -->
+<section id="shop" class="screen hidden">
+  <div class="panel sheet">
+    <div class="shop-head"><h2 data-i18n="shopTitle">오리 상점</h2><span id="shopCoins" class="shop-coins"></span></div>
+    <div class="wd-next" data-i18n="shopSub">마지막 레벨 내 집 연못가를 꾸며요</div>
+    <div id="shopList"></div>
+    <button id="btnShopBack" class="ghost-btn" data-i18n="toLevels">← 레벨 선택</button>
   </div>
 </section>
 

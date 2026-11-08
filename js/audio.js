@@ -61,6 +61,16 @@ const Sfx = (() => {
     noise(t, 0.08, 1500, 1, 0.12);
   }
 
+  function duckBump() {   // 🐥 오리끼리 콩: 고무오리처럼 말랑한 '뽀잉' + 작은 물소리 (벽 부딪힘과 다르게)
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(760, t + 0.05); o.frequency.exponentialRampToValueAtTime(520, t + 0.13);
+    const g = ctx.createGain(); env(g, t, 0.005, 0.16, 0.13);
+    o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 0.18);
+    noise(t + 0.02, 0.07, 2400, 0.9, 0.05);
+  }
+
   function plop() { // 퐁당
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -394,6 +404,6 @@ const Sfx = (() => {
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
 
-  return { init, setSong, quack, splash, bump, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
+  return { init, setSong, quack, splash, bump, duckBump, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
            setMuted, isMuted: () => muted, setMusic, isMusicOn: () => musicOn, suspend, resume };
 })();
