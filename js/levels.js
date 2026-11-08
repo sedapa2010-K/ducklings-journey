@@ -21,6 +21,8 @@ function SL(angle, radius, drop) { return { t: 'C', angle, radius, walls: 'both'
 // 물 엘리베이터 오르막 (나선 슬라이드로 내려간 만큼 다시 올라옴)
 // ⛰️ 절벽: 물길이 뚝 끊기고 drop 만큼 아래의 넓고 깊은 웅덩이(pool)로 떨어짐
 function CL(drop, w) { return { t: 'CL', len: 9.2, gap: 1.2, poolLen: 8, drop: +drop.toFixed(2), walls: 'both', w: +w.toFixed(2) }; }
+// 🎢 세로 한 바퀴(루프): 넓은 직선 위에서 가속 물살을 타고 들어가 관을 따라 한 바퀴 빙 돌고 옆 줄로 나옴
+function LP(w) { return { t: 'S', len: 16, walls: 'both', w: +w.toFixed(2), loop: true }; }
 function UP(rise) { return { t: 'S', len: +(rise * 3.3 + 2).toFixed(2), walls: 'both', liftUp: true, rise: +rise.toFixed(2), drop: -rise }; }
 // 🪨 징검다리: 돌(stone) ↔ 빈 틈(hop) 번갈아. 돌은 좌우로 조금씩 엇갈림(so)
 function STONES(count, rnd) {
@@ -58,21 +60,25 @@ function forkPiece(kind, fs, fw, ih, r) {
 let LEVELS = [
   {
     name: '첫 물놀이',
-    flow: 2.2, width: 4.2,
-    pieces: [
-      S(16, 'both'),
+    flow: 2.2, width: 4.2, lakeY: -2.3,
+    pieces: [                       // 작은 폭포로 슝~ → 오른쪽으로 크게 한 번
+      S(10, 'both'),
+      F(0.9),
+      S(5, 'both'),
       C(-90, 6.5, 'both'),
-      S(18, 'both'),
+      S(14, 'both'),
     ],
   },
   {
     name: '두근두근 물길',   // 좌우 반전: 왼쪽으로 먼저 꺾음
-    flow: 2.4, width: 4.0, cross: 1.8,
+    flow: 2.4, width: 4.0, cross: 1.8, lakeY: -2.4,
     pieces: [
       S(10, 'both'),
       C(90, 6, 'both'),
-      S(5, 'both'),
-      S(10, 'none'),
+      S(4, 'both'),
+      F(1.0),                       // 💦 폭포 타고 쭉
+      S(3, 'both'),
+      S(9, 'none'),
       S(4, 'both'),
       C(-90, 6, 'both'),
       S(6, 'both'),
@@ -83,13 +89,15 @@ let LEVELS = [
   {
     name: '빨라진 물살',
     flow: 3.0, width: 3.8, cross: 2.0,
-    pieces: [                       // ㄷ자로 꺾여 되돌아오는 연속 코너
+    pieces: [                       // ㄷ자로 꺾여 되돌아오는 연속 코너 → 🦘 첫 점프대 (가속 물살이 밀어줘서 그냥 타도 넘음)
       S(10, 'both'),
       C(-90, 4.5, 'both'),
       S(3, 'both'),
       C(-90, 4.5, 'both'),
-      S(6, 'both'),
-      S(9, 'none'),
+      S(4, 'both'),
+      { ...J(), gap: 2.6, len: 4.6, jet: true },   // 첫 점프대는 틈이 짧아서 그냥 흘러가도 넘음
+      S(4, 'both'),
+      S(7, 'none'),
       S(4, 'both'),
       C(90, 5.5, 'both'),
       S(5, 'both'),
@@ -99,17 +107,22 @@ let LEVELS = [
   },
   {
     name: '코너 끝 낭떠러지',   // 좌우 반전: 왼쪽으로 먼저 꺾음
-    flow: 3.0, width: 3.6, cross: 2.2,
-    pieces: [                       // 크게 휘는 둥근 커브 + 코너 직후 난간 없음
+    flow: 3.0, width: 3.6, cross: 2.2, lakeY: -3.5,
+    pieces: [                       // 크게 휘는 둥근 커브 + 코너 직후 난간 없음 + 폭포 두 번
       S(9, 'both'),
       C(150, 7.5, 'both'),
       S(7, 'none'),
+      S(3, 'both'),
+      F(1.1),
       S(3, 'both'),
       C(-150, 7.5, 'both'),
       S(8, 'none'),
       S(3, 'both'),
       C(90, 5.5, 'R'),
-      S(8, 'none'),
+      S(4, 'both'),
+      F(1.1),
+      S(3, 'both'),
+      S(6, 'none'),
       S(3, 'both'),
       C(-90, 5.5, 'L'),
       S(9, 'none'),
@@ -118,20 +131,24 @@ let LEVELS = [
   },
   {
     name: 'S자 아슬아슬',
-    flow: 3.1, width: 3.0, cross: 2.2,
-    pieces: [
-      S(9, 'both', 3.6),
-      S(5, 'none', 3.2),
+    flow: 3.1, width: 3.0, cross: 2.2, lakeY: -2.6,
+    pieces: [                       // 점프대로 시작 → S자 연속 → 폭포
+      S(8, 'both', 3.6),
+      { ...J(), gap: 2.8, len: 4.8, jet: true, w: 3.6 },
+      S(4, 'both', 3.6),
+      S(4, 'none', 3.2),
       C(-90, 4.8, 'L'),
       S(3, 'none'),
       C(90, 4.8, 'none'),
-      S(6, 'none'),
+      S(5, 'none'),
       C(-90, 4.8, 'none'),
       S(2.5, 'none'),
       C(90, 4.8, 'R'),
-      S(7, 'none', 2.8),
+      S(4, 'both', 3.2),
+      F(1.2),
+      S(4, 'both', 3.2),
       C(-90, 5, 'none'),
-      S(6, 'none'),
+      S(5, 'none'),
       S(4, 'both', 3.4),
     ],
   },
@@ -233,6 +250,8 @@ function courseOverlaps(def, checkPond = true) {
     const jumpAt = hasJump ? Math.round(n * 0.5) : -1, slideAt = hasSlide ? Math.round(n * 0.72) : -1;
     let bigJumped = false, slid = false, stoned = false, raced = false, cliffed = false;
     const cliffAt = n >= 6 ? Math.round(n * 0.62) : -1;
+    const loopAt = n >= 31 && n % 5 === 3 ? Math.round(n * 0.42) : -1;   // 🎢 루프: 31레벨부터 5개 중 1개 (33·38·43·48·53·58)
+    let looped = false;
     const raceAt = -1;   // 🏁 라이벌 레이싱: 지금은 끔 (켜려면 n >= 15 && !opt.noRace ? Math.round(n * 0.45) : -1)
     const stoneAt = -1;   // 🪨 징검다리: 너무 어려워서 지금은 끔 (켜려면 n >= 8 ? Math.round(n * 0.27) : -1)
     const flow0 = (2.8 + 0.6 * k + 0.2 * k2) * (1 + 0.1 * Math.min(1, (n - 6) / 30));
@@ -301,7 +320,7 @@ function courseOverlaps(def, checkPond = true) {
       } else if (!jumped && !bigJumped && jumpAt > 0 && c >= jumpAt && c < n) {
         // 🎯 빈 공간 길이: 느리게 와도(유속 1.25배) 넘을 수 있을 만큼 → 착지 수영장(폭 2배)에 과녁
         // 빈 공간은 그냥 흘러가도 넘을 만큼(2.8), 착지 수영장은 힘껏 가속해도 안 넘칠 만큼 길게(15)
-        pieces.push(S(4, 'both'), LJ(2.8, jumpD), { t: 'S', len: 15, walls: 'both', w: +(width0 * 2).toFixed(2), land: true }, S(4, 'both'));
+        pieces.push(S(4, 'both'), LJ(2.8, jumpD), { t: 'S', len: 18, walls: 'both', w: +(width0 * 2).toFixed(2), land: true }, S(4, 'both'));
         bigJumped = true;
       } else if (!jumped && !slid && slideAt > 0 && c >= slideAt && c < n) {
         // 🛝 좌우로 굽이치며 내려감 (좌우 회전 합 0 → 방향은 그대로)
@@ -314,6 +333,9 @@ function courseOverlaps(def, checkPond = true) {
           pieces.push(S(3, 'both'), SL(s0 * 40, 6.5, d6), SL(-s0 * 80, 6.5, d6), SL(s0 * 60, 6.5, d6), SL(-s0 * 60, 6.5, d6), SL(s0 * 80, 6.5, d6), SL(-s0 * 40, 6.5, d6), S(4, 'both'));
         }
         slid = true;
+      } else if (!jumped && !looped && loopAt > 0 && c >= loopAt && c < n) {
+        pieces.push(S(4, 'both'), LP(width0), S(5, 'both'));   // 물길 폭은 보통 그대로 (관 두 줄이 꽉 채움)
+        looped = true;
       } else if (!jumped && !cliffed && cliffAt > 0 && c >= cliffAt && c < n) {
         // 높이 여유가 있으면 그만큼 내려가는 절벽, 없으면 절벽 뒤 물 엘리베이터로 다시 올라옴 (호수 위 여유 안에서 낮은~높은 절벽)
         const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);

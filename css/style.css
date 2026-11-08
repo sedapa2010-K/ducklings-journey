@@ -27,7 +27,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; }
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   padding: 16px; padding-top: max(16px, env(safe-area-inset-top));
 }
-#title { background: linear-gradient(180deg, rgba(191,230,255,.15), rgba(255,250,240,.35)); }
+#title { background: linear-gradient(180deg, rgba(191,230,255,.04), rgba(255,250,240,.1)); }   /* 첫 화면 덮개: 아주 옅게 (색이 바래 보이지 않게) */
 .title-card { text-align: center; animation: float 3s ease-in-out infinite; }
 h1 {
   margin: 4px 0 0; font-size: clamp(24px, 9cqw, 52px); font-weight: normal; color: #fff; white-space: nowrap;
