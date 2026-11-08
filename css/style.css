@@ -215,7 +215,7 @@ h1 {
   display: flex; flex-direction: column; align-items: center; height: 100%;
   padding: 10cqh 0 max(6cqh, env(safe-area-inset-bottom)); animation: none;
 }
-#title .title-card .big-btn { margin-top: auto; }
+#title .title-card .big-btn { margin-top: auto; padding-top: 10px; padding-bottom: 10px; }   /* START 버튼 높이 조금 낮게 */
 #title .title-card { padding-top: 6cqh; }
 /* 🐥 제목 로고: 위 'Duckling’s' + 아래 알록달록 통통 튀는 'Journey' */
 .logo { position: relative; display: flex; flex-direction: column; align-items: center; line-height: .95; margin: 0; text-shadow: none; -webkit-text-stroke: 0; letter-spacing: 0; }
@@ -245,7 +245,7 @@ h1 {
 #title .title-card .small { margin-bottom: 0; }
 .theme-test { display: flex; gap: 6px; margin-top: 12px; padding: 4px; border-radius: 999px; background: rgba(255, 250, 240, .75); }
 .theme-test.hidden { display: none; }
-.theme-test button { padding: 5px 10px; border-radius: 999px; font-size: 13px; background: transparent; color: var(--ink); box-shadow: none; }
+.theme-test button { padding: 5px 8px; border-radius: 999px; font-size: 13px; white-space: nowrap; background: transparent; color: var(--ink); box-shadow: none; }
 .theme-test button.on { background: var(--yellow); box-shadow: 0 2px 0 var(--yellow-dark); }
 /* 일시정지 화면: 언어 선택 */
 .lang-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; font-size: 16px; }

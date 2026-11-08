@@ -19,6 +19,8 @@ function LJ(gap, drop) { return { t: 'L', len: +(3 + gap).toFixed(2), ramp: 3, h
 // 🛝 급류 워터슬라이드: 좌우로 굽이치며 쭉 내려가는 빠른 미끄럼틀 (drop 만큼 내려감)
 function SL(angle, radius, drop) { return { t: 'C', angle, radius, walls: 'both', slide: true, drop: +drop.toFixed(2) }; }
 // 물 엘리베이터 오르막 (나선 슬라이드로 내려간 만큼 다시 올라옴)
+// ⛰️ 절벽: 물길이 뚝 끊기고 drop 만큼 아래의 넓고 깊은 웅덩이(pool)로 떨어짐
+function CL(drop, w) { return { t: 'CL', len: 9.2, gap: 1.2, poolLen: 8, drop: +drop.toFixed(2), walls: 'both', w: +w.toFixed(2) }; }
 function UP(rise) { return { t: 'S', len: +(rise * 3.3 + 2).toFixed(2), walls: 'both', liftUp: true, rise: +rise.toFixed(2), drop: -rise }; }
 // 🪨 징검다리: 돌(stone) ↔ 빈 틈(hop) 번갈아. 돌은 좌우로 조금씩 엇갈림(so)
 function STONES(count, rnd) {
@@ -193,7 +195,9 @@ function courseOverlaps(def, checkPond = true) {
     const avail = Math.max(0, -lakeY - 1.5 - falls * 1.2);
     const hasJump = n >= 10 && !opt.noJump, hasSlide = n >= 12 && !opt.noSlide;
     const jumpD = hasJump ? Math.min(1.2, avail * 0.4) : 0, slideD = hasSlide ? Math.min(2.4, Math.max(0, avail - jumpD)) : 0;
-    const budget = -lakeY - 1.5 - (falls - bigN) * 1.2 - jumpD - slideD;
+    let cliffD = n >= 6 ? Math.min(3.2, Math.max(0, avail - jumpD - slideD)) : 0;   // ⛰️ 절벽 높이: 호수 위 여유만큼 (낮은 절벽 1.2~ / 높은 절벽 ~3.2)
+    if (cliffD < 1.2) cliffD = 0;
+    const budget = -lakeY - 1.5 - (falls - bigN) * 1.2 - jumpD - slideD - cliffD;
     const bigDrop = bigN ? Math.min(budget / bigN, 3.5 + 3 * Math.min(1, (n - 11) / 40) + rng() * 0.8) : 0;
     // 커브 중간 난간 끊김: 레벨 8부터, 높을수록 자주
     const pGap = n < 8 ? 0 : 0.28 + 0.4 * Math.min(1, (n - 8) / 40);   // 난이도↑: 커브 난간 끊김 더 자주
@@ -222,7 +226,8 @@ function courseOverlaps(def, checkPond = true) {
     const dipAt = n < 14 ? -1 : Math.round(n * 0.4);
     let dipped = false;
     const jumpAt = hasJump ? Math.round(n * 0.5) : -1, slideAt = hasSlide ? Math.round(n * 0.72) : -1;
-    let bigJumped = false, slid = false, stoned = false, raced = false;
+    let bigJumped = false, slid = false, stoned = false, raced = false, cliffed = false;
+    const cliffAt = n >= 6 ? Math.round(n * 0.62) : -1;
     const raceAt = -1;   // 🏁 라이벌 레이싱: 지금은 끔 (켜려면 n >= 15 && !opt.noRace ? Math.round(n * 0.45) : -1)
     const stoneAt = -1;   // 🪨 징검다리: 너무 어려워서 지금은 끔 (켜려면 n >= 8 ? Math.round(n * 0.27) : -1)
     const flow0 = (2.8 + 0.6 * k + 0.2 * k2) * (1 + 0.1 * Math.min(1, (n - 6) / 30));
@@ -297,6 +302,15 @@ function courseOverlaps(def, checkPond = true) {
           pieces.push(S(3, 'both'), SL(s0 * 40, 6.5, d6), SL(-s0 * 80, 6.5, d6), SL(s0 * 60, 6.5, d6), SL(-s0 * 60, 6.5, d6), SL(s0 * 80, 6.5, d6), SL(-s0 * 40, 6.5, d6), S(4, 'both'));
         }
         slid = true;
+      } else if (!jumped && !cliffed && cliffAt > 0 && c >= cliffAt && c < n) {
+        // 높이 여유가 있으면 그만큼 내려가는 절벽, 없으면 절벽 뒤 물 엘리베이터로 다시 올라옴 (호수 위 여유 안에서 낮은~높은 절벽)
+        const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);
+        const d = cliffD || Math.min(3.2, yNow - lakeY - 1.6);
+        if (d >= 1.2) {
+          pieces.push(S(5, 'both'), CL(d, width0 * 1.9), S(4, 'both'));
+          if (!cliffD) pieces.push(S(2, 'both'), UP(d), S(3, 'both'));
+        }
+        cliffed = true;
       } else if (!jumped && !raced && raceAt > 0 && c >= raceAt && c < n) {
         // 🏁 레이스 구간: 넓은 물길(두 오리가 나란히) → 완만한 S자 → 결승선
         const rw = +(width0 * 1.35).toFixed(2), rs = frng() < 0.5 ? 1 : -1;
@@ -357,6 +371,9 @@ function courseOverlaps(def, checkPond = true) {
         const s0 = rng() < 0.5 ? 1 : -1;
         pieces.push(S(3, 'both'), UP(3.8), S(2, 'both'), SL(s0 * 40, 7, 0.3), SL(-s0 * 80, 7, 0.3), SL(s0 * 40, 7, 0.3), SL(s0 * 360, 6, 3.8), S(4, 'both'));
         drop += 0.9;
+      } else if (c === Math.round(n * 0.18) || c === Math.round(n * 0.64)) {   // ⛰️ 절벽: 앞쪽은 낮게, 뒤쪽은 높게
+        const d = c < n / 2 ? 1.6 + rng() * 0.4 : 3.0 + rng() * 0.6;
+        pieces.push(S(5, 'both'), CL(d, (4.4 + 0.25 * k) * 1.6), S(5, 'both')); drop += d;
       } else if (bigAt.includes(c)) {   // 💦 큰 폭포
         const d = +(3.5 + rng() * 1.5).toFixed(2); pieces.push(S(4, 'both'), F(d), S(6, 'both')); drop += d;
       } else if (c % 3 === 1) { const d = +(1.3 + rng() * 0.8).toFixed(2); pieces.push(S(3, 'both'), F(d), S(4, 'both')); drop += d; }   // 💦 폭포로 쭉
