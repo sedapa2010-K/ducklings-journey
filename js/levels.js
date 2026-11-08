@@ -14,10 +14,39 @@ function C(angle, radius, walls, w) { return { t: 'C', angle, radius, walls, w }
 function F(drop, len) { return { t: 'F', len: len || Math.max(1.8, drop * 1.25), drop, walls: 'both' }; }
 // J: 점프대 (경사로 2.0 → 끊어진 물길 3.8). 속도를 내서 날아가야 건너감
 function J() { return { t: 'J', len: 5.8, ramp: 2.0, gap: 3.8, h: 0.7, walls: 'both' }; }
+// 🎯 멀리뛰기: 가속 경사로(ramp) → 넓은 빈 공간(gap)을 날아서 → 아래쪽 넓은 착지 수영장(과녁)에 착수
+function LJ(gap, drop) { return { t: 'L', len: +(3 + gap).toFixed(2), ramp: 3, h: 1.0, gap: +gap.toFixed(2), drop: +drop.toFixed(2), walls: 'both' }; }
+// 🛝 급류 워터슬라이드: 좌우로 굽이치며 쭉 내려가는 빠른 미끄럼틀 (drop 만큼 내려감)
+function SL(angle, radius, drop) { return { t: 'C', angle, radius, walls: 'both', slide: true, drop: +drop.toFixed(2) }; }
+// 물 엘리베이터 오르막 (나선 슬라이드로 내려간 만큼 다시 올라옴)
+function UP(rise) { return { t: 'S', len: +(rise * 3.3 + 2).toFixed(2), walls: 'both', liftUp: true, rise: +rise.toFixed(2), drop: -rise }; }
+// 🪨 징검다리: 돌(stone) ↔ 빈 틈(hop) 번갈아. 돌은 좌우로 조금씩 엇갈림(so)
+function STONES(count, rnd) {
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    out.push({ t: 'S', len: 1.0, walls: 'none', w: 2.2, hopGap: true });
+    out.push({ t: 'S', len: 1.6, walls: 'none', w: 2.2, stone: true, so: +((k % 2 ? 1 : -1) * (0.45 + rnd() * 0.45)).toFixed(2) });
+  }
+  out.push({ t: 'S', len: 1.0, walls: 'none', w: 2.2, hopGap: true });
+  return out;
+}
 // K: 갈림길 (가운데 섬이 물길을 둘로 나눔). side 쪽(1=왼쪽, -1=오른쪽)은 ⚡빠른 물살 + 바깥 난간 없음, 반대쪽은 느리지만 안전
 // V: 깊은 골짜기 폭포 (깊이 쑥 떨어졌다가 물 엘리베이터를 타고 다시 원래 높이로 올라옴)
-function V(depth) { return { t: 'V', len: +(depth * 3.3 + 3).toFixed(2), depth, walls: 'both' }; }
-function K(len, side, w, ih) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih }; }
+// 떨어지는 쪽은 짧고 가파르게(스릴), 올라오는 쪽은 예전처럼 길게
+function V(depth) {
+  const drop = depth * 0.5 + 1.2, rise = depth * 2.15 + 1.95, len = +(drop + rise).toFixed(2);
+  return { t: 'V', len, depth, A: +(drop / len).toFixed(3), walls: 'both' };
+}
+// fv = 갈림길 종류, ns = 빠른 쪽이 좁아지기 시작하는 곳(0~1), sq = 섬이 빠른 쪽으로 밀리는 정도
+function K(len, side, w, ih, fv = 'classic', ns = 0.38, sq = 0.65) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih, fv, ns, sq }; }
+// 🔀 갈림길 종류: 기본 / 긴 섬(장애물 3개, 빠른 길에 코인) / 짧은 섬(꽃게 1마리, 빠른 길에 코인) / 넓은 섬(꽃게 2마리)
+const FORK_KINDS = ['classic', 'long', 'short', 'wide'];
+function forkPiece(kind, fs, fw, ih, r) {
+  if (kind === 'long') return K(+(30 + r * 4).toFixed(1), fs, fw, ih, kind, 0.28, 0.8);
+  if (kind === 'short') return K(+(15 + r * 2).toFixed(1), fs, fw, ih, kind, 0.3, 0.55);
+  if (kind === 'wide') return K(+(22 + r * 3).toFixed(1), fs, +(fw + 1).toFixed(2), +(ih * 1.7).toFixed(2), kind, 0.38, 0.65);
+  return K(+(20 + r * 4).toFixed(1), fs, fw, ih);
+}
 
 let LEVELS = [
   {
@@ -105,14 +134,15 @@ let LEVELS = [
 // 코스 겹침 검사: 물길이 자기 자신이나 도착 섬과 겹치면 true
 // ---------------------------------------------------------------------
 function courseOverlaps(def, checkPond = true) {
-  const pts = []; let x = 0, z = 0, th = -Math.PI / 2, d = 0, acc = 0;
+  const pts = []; let x = 0, z = 0, th = -Math.PI / 2, d = 0, acc = 0, y = 0;
   for (const p of def.pieces) {
     const len = p.t === 'C' ? Math.abs(p.angle * Math.PI / 180) * p.radius : p.len;
     const n = Math.max(1, Math.round(len / 0.25)), ds = len / n;
     const dth = p.t === 'C' ? (p.angle * Math.PI / 180) / n : 0;
     for (let i = 0; i < n; i++) {
       th += dth / 2; x -= Math.sin(th) * ds; z -= Math.cos(th) * ds; th += dth / 2; d += ds; acc += ds;
-      if (acc >= 1) { acc = 0; pts.push({ x, z, d, w: (p.w || def.width) / 2 }); }
+      y -= (p.drop || 0) / n;
+      if (acc >= 1) { acc = 0; pts.push({ x, z, d, y, w: (p.w || def.width) / 2 }); }
     }
   }
   const tx = -Math.sin(th), tz = -Math.cos(th);
@@ -125,7 +155,7 @@ function courseOverlaps(def, checkPond = true) {
     for (let ix = cx - 1; ix <= cx + 1; ix++) for (let iz = cz - 1; iz <= cz + 1; iz++) {
       const cell = grid.get(ix + ',' + iz);
       if (cell) for (const b of cell)
-        if (a.d - b.d >= 14 && Math.hypot(a.x - b.x, a.z - b.z) < a.w + b.w + 2.2) return true;
+        if (a.d - b.d >= 14 && Math.abs(a.y - b.y) < 2.6 && Math.hypot(a.x - b.x, a.z - b.z) < a.w + b.w + 2.2) return true;   // 2.6 넘게 위아래면 다리처럼 지나감
     }
     const key = cx + ',' + cz;
     if (!grid.has(key)) grid.set(key, []);
@@ -148,7 +178,7 @@ function courseOverlaps(def, checkPond = true) {
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
-  function build(n, rng) {
+  function build(n, rng, opt = {}) {
     const k = Math.min(1, (n - 6) / 14);         // 레벨 6~20: 0 → 1
     const k2 = Math.max(0, (n - 20) / 20);       // 레벨 21~40: 0 → 1, 41~60: 1 → 2
     const R = 5.4 - 0.7 * k;
@@ -159,7 +189,11 @@ function courseOverlaps(def, checkPond = true) {
     const lakeY = -1.3 - Math.floor((n - 1) / 5) * 2;   // game.js 의 lakeYFor 와 같은 식
     const bigN = n < 11 ? 0 : n < 36 ? 1 : 2;
     const bigAt = bigN === 1 ? [Math.floor(falls / 2)] : bigN === 2 ? [Math.floor(falls / 3), Math.floor(falls * 2 / 3)] : [];
-    const budget = -lakeY - 1.5 - (falls - bigN) * 1.2;
+    // 🎯 멀리뛰기(레벨 10~) · 🛝 워터슬라이드(레벨 12~)도 내려가므로 호수 위 여유 안에서 낙차를 나눠 씀
+    const avail = Math.max(0, -lakeY - 1.5 - falls * 1.2);
+    const hasJump = n >= 10 && !opt.noJump, hasSlide = n >= 12 && !opt.noSlide;
+    const jumpD = hasJump ? Math.min(1.2, avail * 0.4) : 0, slideD = hasSlide ? Math.min(2.4, Math.max(0, avail - jumpD)) : 0;
+    const budget = -lakeY - 1.5 - (falls - bigN) * 1.2 - jumpD - slideD;
     const bigDrop = bigN ? Math.min(budget / bigN, 3.5 + 3 * Math.min(1, (n - 11) / 40) + rng() * 0.8) : 0;
     // 커브 중간 난간 끊김: 레벨 8부터, 높을수록 자주
     const pGap = n < 8 ? 0 : 0.28 + 0.4 * Math.min(1, (n - 8) / 40);   // 난이도↑: 커브 난간 끊김 더 자주
@@ -182,9 +216,16 @@ function courseOverlaps(def, checkPond = true) {
     const forks = n < 16 ? 0 : n < 36 ? 1 : 2;
     const forkAfter = forks === 1 ? [Math.round(n * 0.62)] : forks === 2 ? [Math.round(n * 0.34), Math.round(n * 0.8)] : [];
     let ki = 0;
+    // 레벨마다 갈림길 종류가 달라짐. 한 레벨에 2개면 서로 다른 종류
+    const fk0 = Math.floor(frng() * FORK_KINDS.length), forkKinds = [FORK_KINDS[fk0], FORK_KINDS[(fk0 + 1 + Math.floor(frng() * 3)) % FORK_KINDS.length]];
     // 🎢 골짜기 폭포: 레벨 14부터 코스 40% 쯤에 1개. 호수(수면) 위로 1.3 이상 남는 만큼만 깊게
     const dipAt = n < 14 ? -1 : Math.round(n * 0.4);
     let dipped = false;
+    const jumpAt = hasJump ? Math.round(n * 0.5) : -1, slideAt = hasSlide ? Math.round(n * 0.72) : -1;
+    let bigJumped = false, slid = false, stoned = false, raced = false;
+    const raceAt = -1;   // 🏁 라이벌 레이싱: 지금은 끔 (켜려면 n >= 15 && !opt.noRace ? Math.round(n * 0.45) : -1)
+    const stoneAt = -1;   // 🪨 징검다리: 너무 어려워서 지금은 끔 (켜려면 n >= 8 ? Math.round(n * 0.27) : -1)
+    const flow0 = (2.8 + 0.6 * k + 0.2 * k2) * (1 + 0.1 * Math.min(1, (n - 6) / 30));
     const cw = (turn, long) => {                 // 코너 난간 (U턴·둥근 커브처럼 긴 커브는 바깥 난간은 항상 있음)
       const outer = turn > 0 ? 'R' : 'L';
       const w = rng() < 0.65 - 0.45 * k ? 'both' : (rng() < 0.6 ? outer : 'none');   // 난이도↑: 양쪽 난간 코너 줄임
@@ -233,13 +274,42 @@ function courseOverlaps(def, checkPond = true) {
       while (ji < jumpAfter.length && jumpAfter[ji] <= c) { pieces.push(S(5, 'both'), J(), S(4, 'both')); ji++; jumped = true; }
       if (!jumped && ki < forkAfter.length && forkAfter[ki] <= c && c < n) {
         const fs = frng() < 0.5 ? 1 : -1, fw = +(width0 * 1.75 + 1.2).toFixed(2), ih = +(0.075 * width0 + 0.6).toFixed(2);
-        pieces.push(S(3, 'both'), K(+(20 + frng() * 4).toFixed(1), fs, fw, ih), S(3, 'both'));
+        pieces.push(S(3, 'both'), forkPiece(forkKinds[ki], fs, fw, ih, frng()), S(3, 'both'));
         ki++;
       } else if (!jumped && !dipped && dipAt > 0 && c >= dipAt && c < n) {
         const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);
         const depth = Math.min(3.5 + 4 * Math.min(1, (n - 14) / 30) + frng(), yNow - lakeY - 1.3);
         if (depth >= 2.5) pieces.push(S(3, 'both'), V(+depth.toFixed(2)), S(6, 'both'));
         dipped = true;
+      } else if (!jumped && !bigJumped && jumpAt > 0 && c >= jumpAt && c < n) {
+        // 🎯 빈 공간 길이: 느리게 와도(유속 1.25배) 넘을 수 있을 만큼 → 착지 수영장(폭 2배)에 과녁
+        // 빈 공간은 그냥 흘러가도 넘을 만큼(2.8), 착지 수영장은 힘껏 가속해도 안 넘칠 만큼 길게(15)
+        pieces.push(S(4, 'both'), LJ(2.8, jumpD), { t: 'S', len: 15, walls: 'both', w: +(width0 * 2).toFixed(2), land: true }, S(4, 'both'));
+        bigJumped = true;
+      } else if (!jumped && !slid && slideAt > 0 && c >= slideAt && c < n) {
+        // 🛝 좌우로 굽이치며 내려감 (좌우 회전 합 0 → 방향은 그대로)
+        const s0 = frng() < 0.5 ? 1 : -1;
+        if (n >= 20) {   // 🌀 물 엘리베이터로 3.8 올라가서 → 굽이굽이 → 빙글 한 바퀴 돌며 3.8 내려감 (자기 밑으로 지나감)
+          const d3 = slideD / 3;
+          pieces.push(S(3, 'both'), UP(3.8), S(2, 'both'), SL(s0 * 40, 6.5, d3), SL(-s0 * 80, 6.5, d3), SL(s0 * 40, 6.5, d3), SL(s0 * 360, 5.2, 3.8), S(4, 'both'));
+        } else {       // 굽이굽이 6번 (예전의 1.5배 길이)
+          const d6 = slideD / 6;
+          pieces.push(S(3, 'both'), SL(s0 * 40, 6.5, d6), SL(-s0 * 80, 6.5, d6), SL(s0 * 60, 6.5, d6), SL(-s0 * 60, 6.5, d6), SL(s0 * 80, 6.5, d6), SL(-s0 * 40, 6.5, d6), S(4, 'both'));
+        }
+        slid = true;
+      } else if (!jumped && !raced && raceAt > 0 && c >= raceAt && c < n) {
+        // 🏁 레이스 구간: 넓은 물길(두 오리가 나란히) → 완만한 S자 → 결승선
+        const rw = +(width0 * 1.35).toFixed(2), rs = frng() < 0.5 ? 1 : -1;
+        pieces.push(S(4, 'both'),
+          { t: 'S', len: 6, walls: 'both', w: rw, race: true },
+          { t: 'C', angle: rs * 35, radius: 10, walls: 'both', w: rw, race: true },
+          { t: 'C', angle: -rs * 70, radius: 10, walls: 'both', w: rw, race: true },
+          { t: 'C', angle: rs * 35, radius: 10, walls: 'both', w: rw, race: true },
+          { t: 'S', len: 6, walls: 'both', w: rw, race: true }, S(4, 'both'));
+        raced = true;
+      } else if (!jumped && !stoned && stoneAt > 0 && c >= stoneAt && c < n) {
+        pieces.push(S(3, 'both'), ...STONES(n < 25 ? 4 : n < 45 ? 5 : 6, frng), S(4, 'both'));
+        stoned = true;
       }
       const len = n <= 20 ? 4 + rng() * 4 : n <= 40 ? 3 + rng() * 3 : 2.5 + rng() * 2.5;   // 코너가 많을수록 직선은 짧게
       if (c < n && rng() < 0.42 + 0.33 * k) pieces.push(S(len * 1.15, 'none'), S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
@@ -259,11 +329,60 @@ function courseOverlaps(def, checkPond = true) {
   // 처음 플레이(또는 미리보기)할 때만 그 레벨을 만들어서 페이지 로딩을 빠르게
   const MAX_LEVEL = 60;
   const cache = {};
-  function generate(n) {
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const cand = build(n, seeded(n * 97 + 13 + attempt * 7919));
+  // 🏁 레이스 스테이지: 10레벨마다 1개 (LEVELS[100] ~ LEVELS[105] = 레이스 1~6)
+  // 단계마다 상대 오리 +1, 코스 길어짐, 물길 넓음, 난간은 모두 있음(떨어질 곳 거의 없음), 폭포·점프대 많이
+  function buildRace(k, rng) {
+    const n = 8 + 4 * k, R = 6.5;
+    const PAT = [
+      s => [C(s * 60, R, 'both'), S(3 + rng() * 2, 'both'), C(-s * 60, R, 'both')],
+      s => [C(s * 90, R * 1.2, 'both')],
+      s => [C(s * 45, R * 1.4, 'both'), C(-s * 45, R * 1.4, 'both')],
+      s => [C(s * 120, R * 1.3, 'both')],
+    ];
+    const pieces = [S(12, 'both')];
+    let heading = 0, c = 0, drop = 0;
+    const helixAt = Math.round(n * 0.5), bigAt = [Math.round(n * 0.3), Math.round(n * 0.78)];
+    const JR = () => ({ t: 'J', len: 6.2, ramp: 2.6, gap: 3.6, h: 1.3, walls: 'both', jet: true });   // 🦘 높고 긴 점프대 (경사로 가속)
+    const turnOf = ps => ps.reduce((a, p) => a + (p.t === 'C' ? p.angle : 0), 0);
+    const norm = h => ((h + 540) % 360) - 180;
+    while (c < n) {
+      const cands = [];
+      for (const mk of PAT) for (const sg of [1, -1]) { const ps = mk(sg), h = norm(heading + turnOf(ps)); cands.push({ ps, h, score: rng() - (Math.abs(h) > 100 ? 1.5 : 0) }); }
+      cands.sort((a, b) => b.score - a.score);
+      let ok = null;
+      for (const cd of cands) if (!courseOverlaps({ width: 5, pieces: [...pieces, ...cd.ps, S(8, 'both')] }, false)) { ok = cd; break; }
+      if (!ok) return null;
+      pieces.push(...ok.ps); heading = ok.h; c++;
+      if (c === helixAt) {   // 🌀 스피드 회전: 물 엘리베이터로 올라가서 굽이굽이 → 360° 나선으로 쭉 내려옴
+        const s0 = rng() < 0.5 ? 1 : -1;
+        pieces.push(S(3, 'both'), UP(3.8), S(2, 'both'), SL(s0 * 40, 7, 0.3), SL(-s0 * 80, 7, 0.3), SL(s0 * 40, 7, 0.3), SL(s0 * 360, 6, 3.8), S(4, 'both'));
+        drop += 0.9;
+      } else if (bigAt.includes(c)) {   // 💦 큰 폭포
+        const d = +(3.5 + rng() * 1.5).toFixed(2); pieces.push(S(4, 'both'), F(d), S(6, 'both')); drop += d;
+      } else if (c % 3 === 1) { const d = +(1.3 + rng() * 0.8).toFixed(2); pieces.push(S(3, 'both'), F(d), S(4, 'both')); drop += d; }   // 💦 폭포로 쭉
+      else if (c % 3 === 2) pieces.push(S(5, 'both'), JR(), S(5, 'both'));   // 🦘 점프대 (경사로에 가속 물살 → 그냥 흘러가도 넘음)
+      else pieces.push(S(5 + rng() * 3, 'both'));
+    }
+    pieces.push(S(6, 'both'));
+    return { race: k, rivals: k, no: 10 * k - 1, theme: 'day', lakeY: +(-drop - 2.5).toFixed(2),
+      flow: +(3.5 + 0.12 * k).toFixed(2), width: +(4.4 + 0.25 * k).toFixed(2), cross: 0, pieces };
+  }
+  const RACE_BASE = 100, RACE_N = 6, raceCache = {};
+  function genRace(k) {
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const cand = buildRace(k, seeded(k * 7717 + 29 + attempt * 104729));
       if (cand && !courseOverlaps(cand)) return cand;
     }
+    console.warn('레이스 코스를 못 만듦', k);
+    return { race: k, rivals: k, no: 10 * k - 1, theme: 'day', lakeY: -3, flow: 3.6, width: 4.6, cross: 0, pieces: [S(20, 'both'), C(-90, 8, 'both'), S(20, 'both')] };
+  }
+  function generate(n) {
+    // 안 겹치는 코스가 안 나오면 워터슬라이드 없이 → 그래도 안 되면 멀리뛰기도 없이 같은 시드들로 다시
+    for (const opt of [{}, { noSlide: true }, { noSlide: true, noStone: true }, { noSlide: true, noRace: true, noStone: true }, { noSlide: true, noJump: true, noStone: true, noRace: true }])
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const cand = build(n, seeded(n * 97 + 13 + attempt * 7919), opt);
+        if (cand && !courseOverlaps(cand)) return cand;
+      }
     console.warn('겹치지 않는 코스를 못 만듦: 레벨', n);
     for (let attempt = 60; attempt < 400; attempt++) {   // 시드를 더 바꿔 가며 (도착 섬 겹침은 눈감아 줌)
       const cand = build(n, seeded(n * 97 + 13 + attempt * 7919));
@@ -277,6 +396,7 @@ function courseOverlaps(def, checkPond = true) {
     get(target, prop) {
       if (typeof prop === 'string' && /^\d+$/.test(prop)) {
         const i = +prop;
+        if (i >= RACE_BASE && i < RACE_BASE + RACE_N) { const k = i - RACE_BASE + 1; return raceCache[k] || (raceCache[k] = genRace(k)); }
         if (i >= MAX_LEVEL) return undefined;
         if (i < fixed.length) return fixed[i];
         if (!cache[i]) { cache[i] = generate(i + 1); cache[i].no = i + 1; }

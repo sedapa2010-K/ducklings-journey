@@ -28,7 +28,9 @@
   <div id="hudTime">0.0</div>
   <div id="hudBabies" class="hidden">🐥 0/3</div>
   <div id="hudHearts"></div>
+  <div id="hudCoins">🪙 0</div>
   <div id="hudShield" class="hidden">🛡️ 5</div>
+  <div id="raceBar" class="race-bar hidden"><div class="rb-track"><span id="rbMe" class="rb-icon">🐤</span><span id="rbRival" class="rb-icon">😎</span><span class="rb-flag">🏁</span></div></div>
   <div id="hint" class="hint hidden"></div>
   <div id="countdown" class="countdown hidden"></div>
   <div class="hud-side">
@@ -43,9 +45,14 @@
 <!-- 타이틀 -->
 <section id="title" class="screen">
   <div class="title-card">
-    <h1>Duckling’s Journey</h1>
-    <p class="subtitle" data-i18n="subtitle">귀여운 오리 가족 찾기</p>
+    <h1 class="logo" aria-label="Duckling’s Journey">
+      <span class="logo-top">Duckling’s</span>
+      <span class="logo-main"><span style="--i:0;--c:#ffd43b;--r:-6deg">J</span><span style="--i:1;--c:#ff8fab;--r:4deg">o</span><span style="--i:2;--c:#74c0fc;--r:-3deg">u</span><span style="--i:3;--c:#8ce99a;--r:5deg">r</span><span style="--i:4;--c:#ffa94d;--r:-4deg">n</span><span style="--i:5;--c:#b197fc;--r:3deg">e</span><span style="--i:6;--c:#ffd43b;--r:-5deg">y</span></span>
+      <span class="logo-spark s1">✦</span><span class="logo-spark s2">✦</span><span class="logo-spark s3">✦</span>
+    </h1>
     <button id="btnStart" class="big-btn" data-i18n="start">START</button>
+    <!-- 테스트용: 웹(개발 서버)에서만 보임. 앱(APK)에는 안 나옴 -->
+    <div id="themeTest" class="theme-test hidden"><button data-t="day">☀️ 낮</button><button data-t="sunset">🌅 노을</button><button data-t="night">🌙 밤</button><button data-t="">⏰ 자동</button></div>
   </div>
   <button id="btnMute" class="icon-btn corner-btn" data-i18n-aria="sound" aria-label="소리">🔊</button>
 </section>
@@ -54,10 +61,15 @@
 <section id="levels" class="screen hidden">
   <div class="panel">
     <h2 data-i18n="levelSelect">레벨 선택</h2>
+    <div class="lv-top">
+      <div id="diffToggle" class="diff-toggle"><button data-d="normal" data-i18n="diffNormal">🙂 보통</button><button data-d="hard" data-i18n="diffHard">🔥 어려움</button></div>
+      <button id="btnContinue" class="big-btn continue-btn">▶ 이어하기</button>
+    </div>
     <div class="level-pager"><button id="pgPrev" data-i18n-aria="prevPage" aria-label="이전 페이지">◀</button><span id="pgLabel">1 ~ 20</span><button id="pgNext" data-i18n-aria="nextPage" aria-label="다음 페이지">▶</button></div>
+    <div id="raceRow" class="race-row"></div>
     <div id="levelGrid" class="level-grid"></div>
     <div class="levels-bottom">
-      <button id="btnBackTitle" class="ghost-btn" data-i18n="back">← 처음으로</button>
+      <button id="btnBackTitle" class="ghost-btn" data-i18n="back">← 메인으로</button>
       <button id="btnWardrobe" class="pill-btn wardrobe-btn">👗 꾸미기</button>
     </div>
   </div>

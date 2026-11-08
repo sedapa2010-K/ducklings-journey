@@ -50,7 +50,7 @@ h1 {
   box-shadow: var(--shadow); border: 4px solid #fff; text-align: center;
 }
 .panel h2 { margin: 0 0 16px; font-weight: normal; font-size: 30px; }
-.level-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+.level-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
 .level-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   aspect-ratio: 1; padding: 6px 2px; border-radius: 18px; background: #fff; box-shadow: 0 4px 0 #e8dcc6;
@@ -158,7 +158,23 @@ h1 {
     box-shadow: 0 20px 60px rgba(60, 90, 120, .35);
   }
 }
-.level-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: -4px 0 12px; }
+.lv-top { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 6px; }
+.lv-top .diff-toggle { margin: 0; flex: none; }
+.continue-btn { flex: 1; min-width: 0; margin: 0; padding: 7px 4px; font-size: 14px; border-radius: 999px; white-space: nowrap; }
+.half-heart { position: relative; display: inline-block; }
+.half-heart::after { content: '❤️'; position: absolute; left: 0; top: 0; width: 50%; overflow: hidden; white-space: nowrap; }
+.race-row { display: flex; gap: 6px; margin: 0 0 6px; }
+.race-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 4px 6px; border-radius: 14px; font-size: 14px; line-height: 1.2;
+  background: linear-gradient(180deg, #fff6cc, #ffe08a); box-shadow: 0 3px 0 #e8c25a; color: var(--ink); }
+.race-btn .rs { font-size: 11px; opacity: .85; }
+.race-btn .rs .stars.small { font-size: 10px; }
+.race-btn.locked { opacity: .55; pointer-events: none; filter: grayscale(.6); }
+#hudTime.race { font-size: 34px; }
+.race-place { display: block; font-size: 26px; margin: 2px 0 4px; }
+.diff-toggle { display: flex; justify-content: center; gap: 0; margin: 0 auto 4px; background: #f1e8d8; border-radius: 999px; padding: 4px; width: fit-content; }
+.diff-toggle button { padding: 5px 9px; border-radius: 999px; font-size: 14px; background: transparent; color: #8a7a66; box-shadow: none; }
+.diff-toggle button.on { background: var(--yellow); color: var(--ink); box-shadow: 0 3px 0 var(--yellow-dark); }
+.level-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: -2px 0 4px; }
 .level-pager button {
   width: 40px; height: 40px; border-radius: 50%; background: var(--yellow); font-size: 16px;
   box-shadow: 0 4px 0 var(--yellow-dark);
@@ -171,6 +187,22 @@ h1 {
   filter: drop-shadow(0 2px 0 rgba(90,70,50,.25));
 }
 #hudHearts.bump { animation: shake .45s; }
+#hudCoins {
+  position: absolute; left: 16px; top: calc(max(12px, env(safe-area-inset-top)) + 72px); font-size: 20px; color: #ffe27a;
+  -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 3px 0 rgba(90,70,50,.3); pointer-events: none;
+}
+.race-bar { position: absolute; left: 50%; transform: translateX(-50%); top: calc(max(12px, env(safe-area-inset-top)) + 140px); width: 62%; pointer-events: none; z-index: 2; }
+.race-bar.hidden { display: none; }
+.rb-track { position: relative; height: 10px; border-radius: 999px; background: rgba(255, 250, 240, .9); box-shadow: 0 2px 0 rgba(90, 70, 50, .25); }
+.rb-icon { position: absolute; top: 50%; transform: translate(-50%, -55%) scaleX(-1); font-size: 22px; transition: left .1s linear; }   /* 오른쪽(결승선)을 바라봄 */
+.rb-me { z-index: 1; }
+/* 🏁 손잡이 달린 체크무늬 깃발 (막대 + 깃발) */
+.rb-flag { position: absolute; right: -16px; bottom: 2px; width: 22px; height: 30px; }
+.rb-flag::before { content: ''; position: absolute; left: 2px; bottom: 0; width: 3px; height: 30px; border-radius: 2px; background: #8a5a32; box-shadow: 0 1px 0 rgba(0,0,0,.2); }
+.rb-flag::after { content: ''; position: absolute; left: 5px; top: 1px; width: 17px; height: 12px; border-radius: 1px 3px 3px 1px;
+  background: conic-gradient(#222 25%, #fff 0 50%, #222 0 75%, #fff 0) 0 0 / 6px 6px; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+#hudCoins.bump { animation: pop .3s cubic-bezier(.2, 1.6, .4, 1); }
+.coin-need { font-size: 14px; opacity: .75; }
 @keyframes shake { 20%, 60% { transform: translateX(-4px); } 40%, 80% { transform: translateX(4px); } }
 #hudShield {
   position: absolute; left: 14px; top: calc(max(12px, env(safe-area-inset-top)) + 100px);
@@ -178,13 +210,43 @@ h1 {
   box-shadow: 0 3px 0 rgba(40, 110, 170, .5);
 }
 /* 첫 화면: 제목은 위, 시작 버튼은 아래 → 가운데에 오리가 보이게 */
-#title { align-items: stretch; }
+#title { align-items: stretch; touch-action: none; }
 #title .title-card {
   display: flex; flex-direction: column; align-items: center; height: 100%;
   padding: 10cqh 0 max(6cqh, env(safe-area-inset-bottom)); animation: none;
 }
 #title .title-card .big-btn { margin-top: auto; }
+#title .title-card { padding-top: 6cqh; }
+/* 🐥 제목 로고: 위 'Duckling’s' + 아래 알록달록 통통 튀는 'Journey' */
+.logo { position: relative; display: flex; flex-direction: column; align-items: center; line-height: .95; margin: 0; text-shadow: none; -webkit-text-stroke: 0; letter-spacing: 0; }
+.logo-top {
+  font-size: clamp(30px, 12cqw, 54px); color: #fff; transform: rotate(-5deg) translateX(-6%);
+  -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill;
+  text-shadow: 0 4px 0 var(--ink), 0 8px 14px rgba(40, 80, 120, .28);
+}
+.logo-main { display: flex; font-size: clamp(54px, 22cqw, 104px); margin-top: -4px; }
+.logo-main span {
+  display: inline-block; color: var(--c); margin: 0 -1px;
+  -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill;
+  text-shadow: 0 6px 0 var(--ink), 0 12px 16px rgba(40, 80, 120, .3);
+  transform: rotate(var(--r)); animation: letterHop 2.6s ease-in-out infinite; animation-delay: calc(var(--i) * .14s);
+}
+@keyframes letterHop { 0%, 60%, 100% { transform: translateY(0) rotate(var(--r)); } 30% { transform: translateY(-9px) rotate(calc(var(--r) * -1)); } }
+.logo-spark {
+  position: absolute; color: #ffe14d; font-size: clamp(26px, 10cqw, 44px); line-height: 1; -webkit-text-stroke: 0;
+  text-shadow: 0 0 3px #fff, 0 0 10px #fff, 0 0 20px #ffd23f, 0 2px 0 #d99a00;
+  animation: twinkle 1.8s ease-in-out infinite;
+}
+.logo-spark.s1 { top: -14%; left: 2%; }
+.logo-spark.s2 { bottom: 4%; left: -12%; animation-delay: .6s; font-size: clamp(22px, 8cqw, 36px); }
+.logo-spark.s3 { top: 26%; right: -14%; animation-delay: 1.2s; font-size: clamp(18px, 6.5cqw, 30px); }
+@keyframes twinkle { 0%, 100% { opacity: .55; transform: scale(.75) rotate(0); } 50% { opacity: 1; transform: scale(1.25) rotate(45deg); } }
+#title .subtitle { margin-top: 14px; }
 #title .title-card .small { margin-bottom: 0; }
+.theme-test { display: flex; gap: 6px; margin-top: 12px; padding: 4px; border-radius: 999px; background: rgba(255, 250, 240, .75); }
+.theme-test.hidden { display: none; }
+.theme-test button { padding: 5px 10px; border-radius: 999px; font-size: 13px; background: transparent; color: var(--ink); box-shadow: none; }
+.theme-test button.on { background: var(--yellow); box-shadow: 0 2px 0 var(--yellow-dark); }
 /* 일시정지 화면: 언어 선택 */
 .lang-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; font-size: 16px; }
 .pop-buttons .lang-row button {
@@ -205,6 +267,7 @@ h1 {
 @keyframes starPop { from { transform: scale(0) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
 .stars.small { font-size: 12px; }
 .mission-list { display: flex; flex-direction: column; gap: 4px; margin: 10px auto 0; text-align: left; font-size: 15px; width: fit-content; max-width: 100%; }
+.mission-list > span { white-space: nowrap; font-size: clamp(12px, 4cqw, 15px); }   /* 별 조건은 한 줄로 */
 .mission-list > span { opacity: .55; }
 .mission-list > span.ok { opacity: 1; }
 .play-time { margin-top: 2px; font-size: 13px; opacity: .7; text-align: center; }
