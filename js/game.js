@@ -3252,6 +3252,8 @@ function raceWin(tm) {
 }
 let winT0 = 0, winA0 = 0;
 const FINAL_ORBIT = 28;  // 도착하면 이 시간(초)에 한 바퀴씩, 계속 천천히 돌림 (예전의 절반 속도)
+// 레벨 n을 깬 적이 있는지: 다음 레벨이 열렸거나(보통), 기록이 남아 있으면(마지막 60레벨은 다음이 없어서 기록으로 판단)
+const levelCleared = n => save.unlocked > n || !!(save.best && save.best[n]) || !!(save.bestN && save.bestN[n]);
 function startWin() {
   state = 'win'; celebrateT = 0; winT0 = elapsed;
   winA0 = Math.atan2(camera.position.x - world.pondC.x, camera.position.z - world.pondC.z);   // 지금 카메라 쪽에서 회전 시작
@@ -4456,7 +4458,7 @@ function renderRaceRow() {   // 🏁 이 페이지의 레이스 (레벨 10·20 �
   const row = $('#raceRow'); row.innerHTML = '';
   for (const k of [levelPage * 2 + 1, levelPage * 2 + 2]) {
     if (k > 6) continue;
-    const open = TEST_UNLOCK || save.unlocked > 10 * k, rec = raceRec(k);
+    const open = TEST_UNLOCK || levelCleared(10 * k), rec = raceRec(k);
     const b = document.createElement('button');
     b.className = 'race-btn' + (open ? '' : ' locked');
     b.innerHTML = `<span class="rn">${t('raceName', k)}</span>` + (open
