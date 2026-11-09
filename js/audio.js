@@ -144,6 +144,13 @@ const Sfx = (() => {
     for (let k = 0; k < 3; k++) noise(t + k * 0.035 + Math.random() * 0.02, 0.03, 2200 + Math.random() * 1800, 1.2, 0.09 + Math.random() * 0.05);
   }
 
+  function clack() { // 🚃 기차 레일 이음매: 덜컹 (낮은 쿵 + 쇠 딸깍)
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.05, 260, 1.2, 0.22, 'lowpass');
+    noise(t + 0.06, 0.03, 3200, 4, 0.08);
+  }
+
   function swoop() { // 🦅 덮칠 때: 휘익 + 퍽
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -439,6 +446,6 @@ const Sfx = (() => {
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
 
-  return { init, setSong, quack, splash, bump, duckBump, eagle, swoop, gravel, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
+  return { init, setSong, quack, splash, bump, duckBump, eagle, swoop, gravel, clack, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
            setMuted, isMuted: () => muted, setMusic, isMusicOn: () => musicOn, suspend, resume };
 })();

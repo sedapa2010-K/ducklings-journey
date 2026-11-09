@@ -9,7 +9,9 @@ Duckling's Journey (귀여운 오리 가족 찾기): a portrait mobile 3D game w
 ## Commands
 
 - Run locally (no-cache server): `python serve.py`, then open http://localhost:8123. `.claude/launch.json` has a `ducksway` preview config for the same server. Always check the game in the portrait phone view.
-- Build the APK (Git Bash): `bash build-apk.sh` → `dist/DucklingsJourney.apk`.
+- Build the APK (Git Bash): `bash build-apk.sh` → `dist/DucklingsJourney.apk` (debug, for testing only).
+- Build the Play Store bundle: `VERSION_CODE=<n> VERSION_NAME=<x.y> bash build-apk.sh release` → `dist/DucklingsJourney.aab`. Signing reads `C:\Users\leejj\android-build\keystore.properties` (outside the repo; never commit the keystore). The script also removes the INTERNET permission, writes the Korean app name (`values-ko`, '오리가족찾기'), the adaptive icon XML, and a tiny native `KeepAwake` plugin (`MainActivity.java` + `KeepAwakePlugin.java`) that game.js calls to keep the screen on during play (web Wake Lock is the browser fallback). The android/ project is generated, so native changes belong in build-apk.sh.
+- Dev-only hooks (`window.__duck`, `?unlock=1`) exist only when the page is served over `http://` with a port (`DEV_BUILD` in game.js). The Android app (https://localhost) has them off.
   - It copies `index.html`, `css/`, `js/` and `fonts/` into `C:\Users\leejj\android-build\ducksway-app`. That English-only path avoids problems with the Korean OneDrive path.
   - It then runs `npx cap sync`, regenerates icons with `tools/make-icons.js`, and builds a debug APK with Gradle.
   - Icons are drawn procedurally by `tools/make-icons.js`, which writes PNGs directly with no image library. Preview one with `node tools/make-icons.js <out-res-dir> <preview.png>`.
@@ -23,7 +25,7 @@ Scripts load as plain globals in this order: `i18n.js` → `levels.js` → `audi
 - A course is a list of pieces:
   - `S(len, walls, w)` straight, `C(angleDeg, radius, walls, w)` corner (+ is a left turn).
   - `F(drop)` waterfall, `J()` jump.
-  - `LJ` long jump with target, `SL` slide, `UP` water lift, `V` valley, `CL` cliff + pool, `LP` vertical loop.
+  - `LJ` long jump with target, `SL` slide, `UP` water lift, `V` valley, `CL` cliff + pool, `LP` vertical loop, `MC` mine-cart rails (samples flagged `rail`, ridden in `cartStep` via `P.cart`).
   - `K` / `forkPiece` / `curveFork` fork.
   - Walls are `'both' | 'L' | 'R' | 'none'`. `'none'` means you can fall off there.
 - Levels 1–5 are hand-made in the `LEVELS` array literal.

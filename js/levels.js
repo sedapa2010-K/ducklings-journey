@@ -23,6 +23,23 @@ function SL(angle, radius, drop) { return { t: 'C', angle, radius, walls: 'both'
 function CL(drop, w) { return { t: 'CL', len: 9.2, gap: 1.2, poolLen: 8, drop: +drop.toFixed(2), walls: 'both', w: +w.toFixed(2) }; }
 // 🎢 세로 한 바퀴(루프): 넓은 직선 위에서 가속 물살을 타고 들어가 관을 따라 한 바퀴 빙 돌고 옆 줄로 나옴
 function LP(w) { return { t: 'S', len: 16, walls: 'both', w: +w.toFixed(2), loop: true }; }
+// 🚃 광산 기차: 물길이 끝나고 승강장 → 기차 1칸을 타고 오르내리는 레일 → 갈림 레일(🪙 코인 / ⚡ 빠른 길) → 다시 물길로 풍덩
+const MC_LEN = 90;   // 레일 길이 (예전 30의 3배)
+// 레일 모양: 좌우로 굽이치는 S자 (조각마다 [길이, 각도]). 큰 커브부터 시도하고, 겹치면 더 완만한 모양으로
+const MC_SHAPES = [
+  [[22, 70], [46, -120], [22, 70]],
+  [[25, 60], [40, -90], [25, 60]],
+  [[25, 40], [40, -60], [25, 40]],
+  [[30, 30], [30, -30], [30, 30]],
+  [[90, 30]],
+];
+function MC(shape, sg) {   // cu0~cu1: 레일 전체에서 이 조각이 차지하는 구간 (언덕·갈림 레일 모양을 레일 전체 기준으로)
+  let at = 0;
+  return shape.map(([len, ang]) => {
+    const p = { t: 'C', angle: sg * ang, radius: +(len / (Math.abs(ang) * Math.PI / 180)).toFixed(2), walls: 'none', w: 8.0, cart: true, cu0: +(at / MC_LEN).toFixed(4), cu1: +((at + len) / MC_LEN).toFixed(4) };
+    at += len; return p;
+  });
+}
 function UP(rise) { return { t: 'S', len: +(rise * 3.3 + 2).toFixed(2), walls: 'both', liftUp: true, rise: +rise.toFixed(2), drop: -rise }; }
 // 🪨 징검다리: 돌(stone) ↔ 빈 틈(hop) 번갈아. 돌은 좌우로 조금씩 엇갈림(so)
 function STONES(count, rnd) {
@@ -252,6 +269,8 @@ function courseOverlaps(def, checkPond = true) {
     const cliffAt = n >= 6 ? Math.round(n * 0.62) : -1;
     const loopAt = n >= 31 && n % 5 === 3 ? Math.round(n * 0.42) : -1;   // 🎢 루프: 31레벨부터 5개 중 1개 (33·38·43·48·53·58)
     let looped = false;
+    const cartAt = n >= 41 && (n % 5 === 1 || n % 5 === 4) ? Math.round(n * 0.25) : -1;   // 🚃 광산 기차: 41·44·46·49·51·54·56·59
+    let carted = false;
     const raceAt = -1;   // 🏁 라이벌 레이싱: 지금은 끔 (켜려면 n >= 15 && !opt.noRace ? Math.round(n * 0.45) : -1)
     const stoneAt = -1;   // 🪨 징검다리: 너무 어려워서 지금은 끔 (켜려면 n >= 8 ? Math.round(n * 0.27) : -1)
     const flow0 = (2.8 + 0.6 * k + 0.2 * k2) * (1 + 0.1 * Math.min(1, (n - 6) / 30));
@@ -312,6 +331,17 @@ function courseOverlaps(def, checkPond = true) {
         }
         pieces.push(S(3, 'both'), fk, S(3, 'both'));
         ki++;
+      } else if (!jumped && !carted && cartAt > 0 && c >= cartAt && c < n) {
+        let mc = null;
+        for (const shape of MC_SHAPES) {   // 크게 굽이치는 모양부터, 왼쪽·오른쪽 중 안 겹치는 쪽
+          for (const sg of [1, -1]) {
+            const cand = MC(shape, sg);
+            if (!courseOverlaps({ width: 3.6, pieces: [...pieces, S(4, 'both'), ...cand, S(5, 'both'), S(8, 'both')] }, false)) { mc = cand; break; }
+          }
+          if (mc) break;
+        }
+        if (mc) { pieces.push(S(4, 'both'), ...mc, S(5, 'both')); heading = norm(heading + mc.reduce((a, q) => a + q.angle, 0)); }
+        carted = !!mc;
       } else if (!jumped && !dipped && dipAt > 0 && c >= dipAt && c < n) {
         const yNow = -pieces.reduce((a, q) => a + (q.drop || 0), 0);
         const depth = Math.min(3.5 + 4 * Math.min(1, (n - 14) / 30) + frng(), yNow - lakeY - 1.3);
@@ -360,10 +390,15 @@ function courseOverlaps(def, checkPond = true) {
         stoned = true;
       }
       const len = n <= 20 ? 4 + rng() * 4 : n <= 40 ? 3 + rng() * 3 : 2.5 + rng() * 2.5;   // 코너가 많을수록 직선은 짧게
-      if (c < n && rng() < 0.42 + 0.33 * k) pieces.push(S(len * 1.15, 'none'), S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
-      else pieces.push(S(len, 'both'));
+      if (c < n && rng() < 0.42 + 0.33 * k) pieces.push({ ...S(len * 1.15, 'none'), plain: true }, S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
+      else pieces.push({ ...S(len, 'both'), plain: true });
     }
     pieces.push(S(5, 'both'));
+    if (carted) {   // 🚃 기차 구간만큼 보통 직선들을 고르게 줄여서 레벨 전체 길이는 예전과 같게
+      const plain = pieces.filter(q => q.plain), tot = plain.reduce((a, q) => a + q.len, 0);
+      const f = Math.max(0.35, 1 - (MC_LEN + 9) / Math.max(1, tot));
+      for (const q of plain) q.len = +(q.len * f).toFixed(2);
+    }
     // 난이도↑: 레벨이 오를수록 폭은 최대 10% 좁게, 유속 최대 +10%, 옆 물살 최대 +25%
     const hard = Math.min(1, (n - 6) / 30);
     return {

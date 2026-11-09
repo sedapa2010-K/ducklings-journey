@@ -34,6 +34,9 @@ const GYRO_FULL_DEG = 22; // 이 각도만큼 기울이면 최대 입력
 const GYRO_DEAD_DEG = 2.5;
 
 // ---------- 저장 (PRD 6.2: 해금 상태/기록) ----------
+// 개발용 로컬 서버(python serve.py → http://localhost:8123 등 포트 있음)에서만 테스트 기능을 켬.
+// 안드로이드 앱은 https://localhost (포트 없음) 라서 출시판에선 꺼짐
+const DEV_BUILD = location.protocol === 'http:' && location.port !== '';
 const SAVE_KEY = 'duckwaterway.v1';
 let save = { unlocked: 1, best: {}, missions: {}, equip: {} };   // missions[레벨] = 성공한 미션 비트(1·2·4)
 try {
@@ -41,7 +44,6 @@ try {
   if (s && s.unlocked) save = Object.assign(save, s);
   if (!save.missions) save.missions = {};
   if (!save.equip) save.equip = {};
-  if (save.equip.head === 'beanie') save.equip.head = 'santa';   // 털모자 → 산타 모자로 바뀜
 } catch (e) {}
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} }
 
@@ -582,7 +584,7 @@ const widthMul = n => isHard() ? 1 : 1 + 0.24 * clamp((n - 3) / 17, 0, 1);
 // bank = 옆으로 1 갈 때 높아지는 양 (+ 면 왼쪽이 높음). 코너 앞뒤로 부드럽게 기울었다 펴짐
 const BANK_MAX = Math.tan(Math.PI / 6), BANK_G = 4.5;   // 최대 30° / 안쪽으로 미는 세기
 function bankTrack(S) {
-  const N = S.length, raw = new Float32Array(N), plain = q => !(q.fall || q.ramp || q.gap || q.jet || q.lift || q.slide || q.loopZone || q.fork || q.stone || q.cliff || q.pool || q.land || q.race || q.hop || q.ih > 0.02);
+  const N = S.length, raw = new Float32Array(N), plain = q => !(q.fall || q.ramp || q.gap || q.jet || q.lift || q.slide || q.loopZone || q.fork || q.stone || q.cliff || q.pool || q.land || q.race || q.hop || q.rail || q.ih > 0.02);
   for (let i = 4; i < N - 4; i++) {
     const s = S[i], a = S[i - 4], b = S[i + 4];
     if (!plain(s)) continue;
@@ -610,7 +612,7 @@ function sampleTrack(def) {
   const push = (p, slope = 0, flags = {}) => {
     const fx = -Math.sin(th), fz = -Math.cos(th);
     out.push({ x, y, z, tx: fx, tz: fz, nx: fz, nz: -fx, d, slope,   // n = 진행 방향의 왼쪽
-      fall: p.t === 'F' || !!flags.fall, lift: !!flags.lift, vlift: !!flags.vlift, ramp: !!flags.ramp, gap: !!flags.gap || !!p.hopGap, jet: !!flags.jet, big: !!flags.big, loopIn: !!flags.loopIn, loopZone: !!p.loop, cliff: !!flags.cliff, pool: !!flags.pool, land: !!p.land, slide: !!p.slide, stone: !!p.stone, so: p.stone ? p.so : 0, hop: !!p.hopGap, race: !!p.race,
+      fall: p.t === 'F' || !!flags.fall, lift: !!flags.lift, vlift: !!flags.vlift, rail: !!flags.rail, rlane: flags.rlane || 0, rlaneW: flags.rlaneW || 0, ramp: !!flags.ramp, gap: !!flags.gap || !!p.hopGap, jet: !!flags.jet, big: !!flags.big, loopIn: !!flags.loopIn, loopZone: !!p.loop, cliff: !!flags.cliff, pool: !!flags.pool, land: !!p.land, slide: !!p.slide, stone: !!p.stone, so: p.stone ? p.so : 0, hop: !!p.hopGap, race: !!p.race,
       fork: !!p.fork, fside: p.fork ? p.fside : 0, fv: p.fork ? p.fv || 'classic' : '', ih: (flags.ih || 0) * WM, ic: (flags.ic || 0) * WM, fast: !!flags.fast,   // 🔀 갈림길: 가운데 섬 반폭(ih), 빠른 쪽(fside)
       w: (p.w || def.width) / 2 * WM,
       wl: p.walls === 'both' || p.walls === 'L',
@@ -663,6 +665,16 @@ function sampleTrack(def) {
         const u = (i + 1) / n;
         y = y0 - p.drop * (u * u * (3 - 2 * u));
         slope = p.drop * 6 * u * (1 - u) / len;
+      }
+      if (p.cart) {   // 🚃 광산 기차 레일: 승강장(평평) → 언덕 두 번 오르내림 → 끝(평평). 가운데쯤에서 레일이 둘로 갈라졌다 다시 합쳐짐
+        const u = (p.cu0 ?? 0) + (i + 1) / n * ((p.cu1 ?? 1) - (p.cu0 ?? 0)), v = clamp((u - 0.05) / 0.9, 0, 1);   // u: 레일 전체에서의 위치
+        const hill = uu => { const vv = clamp((uu - 0.05) / 0.9, 0, 1); return uu < 0.05 || uu > 0.95 ? 0 : 2.0 * Math.sin(Math.PI * vv) + 1.0 * Math.sin(5 * Math.PI * vv); };
+        y = y0 + hill(u) - hill(p.cu0 ?? 0);   // 오르락내리락 언덕 여러 개 (y0 = 이 조각 시작 높이라서 그 높이의 언덕만큼 빼 줌 → 조각 이음매가 매끈)
+        const sm01 = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+        const env = sm01((v - 0.32) / 0.1) * sm01((0.74 - v) / 0.1), tt = clamp((v - 0.32) / 0.42, 0, 1);
+        // rlane: 빠른 레일 (가깝게 나란히) / rlaneW: 🪙 코인 레일 (바깥으로 크게 빙 돌아감)
+        push(p, 0, { rail: true, rlane: 0.85 * env, rlaneW: 0.95 * env + 3.4 * Math.sin(Math.PI * tt) ** 1.3 });
+        continue;
       }
       if (p.loop) {   // 🎢 루프 직선: 앞 45%는 가속 물살, 55% 지점에서 루프 관으로 들어감
         const dd = (i + 1) * ds;
@@ -745,7 +757,7 @@ function buildLevelWorld(def) {
   const add = m => { m.receiveShadow = true; m.castShadow = true; group.add(m); return m; };
 
   // 물 표면 + 바닥 + 측면 (돌 수로). 점프대의 끊어진 구간(gap)은 비워 둠
-  const solid = runs(samples.map(s => ({ x: !s.gap && !s.stone })), 'x');
+  const solid = runs(samples.map(s => ({ x: !s.gap && !s.stone && !s.rail })), 'x');
   const deepWater = levelNo >= 50 && !RACE;   // 🌊 레벨 50~: 물이 너무 밝아 보여서 더 짙은 물 + 군데군데 짙은 얼룩
   for (const [a, b] of solid) {
     add(ribbon(samples, a, b, s => s.w, 0.02, s => -s.w, 0.02, waterMatFor(theme, deepWater), 4));
@@ -831,7 +843,7 @@ function buildLevelWorld(def) {
       for (let i = a; i <= b; i += 8) posts.push([samples[i], sg]);
       if ((b - a) % 8) posts.push([samples[b], sg]);
     }
-    for (const [a, b] of runs(samples.map(s => ({ x: !s[side] && !s.island && !s.gap && !s.stone })), 'x')) {
+    for (const [a, b] of runs(samples.map(s => ({ x: !s[side] && !s.island && !s.gap && !s.stone && !s.rail })), 'x')) {
       if (b - a < 2) continue;
       const foam = ribbon(samples, a, b, s => sg * (s.w - 0.18), 0.04, s => sg * s.w, 0.04,
         new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
@@ -972,7 +984,7 @@ function buildLevelWorld(def) {
   const pillarGeo = new THREE.CylinderGeometry(0.55, 0.75, 1, 10);
   for (let i = 10; i < N - 10; i += 28) {
     const s = samples[i];
-    if (s.gap || s.ramp || s.stone) continue;
+    if (s.gap || s.ramp || s.stone || s.rail) continue;
     if (samples.some(q => q.y < s.y - 1.5 && (q.x - s.x) ** 2 + (q.z - s.z) ** 2 < (s.w + q.w + 1) ** 2)) continue;
     const h = s.y - BASE_D - LAKE_Y;
     const p = new THREE.Mesh(pillarGeo, toon(0xcdbda3));
@@ -1145,7 +1157,7 @@ function buildLevelWorld(def) {
     const count = RACE ? 2 + RACE : Math.min(10, levelNo / 5 + 2);   // 5:3, 10:4, ... 40~60: 10 / 레이스: 3~8
     for (let j = 0; j < count; j++) {
       let i = Math.round(30 + (N - 60) * (j + 0.5) / count);
-      while (samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork || samples[i].stone || (i > 0 && samples[i - 1].fall)) i += 6;
+      while (samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork || samples[i].stone || samples[i].rail || (i > 0 && samples[i - 1].fall)) i += 6;
       const sb = samples[i];
       const off = (rng() - 0.5) * 0.9 * sb.w;   // 가운데에서 살짝 비껴서
       const d = makeDuck({ scale: 0.55 });
@@ -1184,7 +1196,7 @@ function buildLevelWorld(def) {
     picks.sort((a, b) => a - b);
     for (let i of picks) {
       i = clamp(i, 10, N - 10);
-      while ((samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork || samples[i].stone) && i < N - 10) i++;
+      while ((samples[i].fall || samples[i].gap || samples[i].ramp || samples[i].fork || samples[i].stone || samples[i].rail) && i < N - 10) i++;
       const si = samples[i];
       const m = new THREE.Group();
       const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), toon(0x6fd3ff));
@@ -1237,7 +1249,8 @@ function buildLevelWorld(def) {
   // 아이템·아기 오리·폭포 근처와 코너는 피해서 직선 구간에 놓음
   const busy = [];
   items.forEach(it => busy.push(it.idx)); babies.forEach(b => busy.push(b.idx));
-  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap || sm.fork || sm.lift || sm.land || sm.slide || sm.stone || sm.race || sm.pool || sm.loopZone) busy.push(i); });
+  samples.forEach((sm, i) => { if (sm.fall || sm.ramp || sm.gap || sm.fork || sm.lift || sm.land || sm.slide || sm.stone || sm.race || sm.pool || sm.loopZone || sm.rail) busy.push(i); });
+  for (const [, b] of runs(samples, 'rail')) for (let k = b + 1; k <= b + 48 && k < N; k++) busy.push(k);   // 🚃 기차에서 내려 착지하는 곳 앞엔 장애물 없음
   const CLIFF_RUN = 100;   // ⛰️ 절벽 앞 도움닫기 구간(약 25칸)엔 장애물 없음 → 마음껏 가속
   for (const [a] of runs(samples.map(q => ({ x: q.gap && q.cliff })), 'x')) for (let k = Math.max(0, a - CLIFF_RUN); k < a; k++) busy.push(k);
   const straightAt = i => { const a = samples[Math.max(0, i - 10)], b = samples[Math.min(N - 1, i + 10)]; return a.tx * b.tx + a.tz * b.tz > 0.97; };
@@ -1505,7 +1518,7 @@ function buildLevelWorld(def) {
   const GR = 11;   // 가운데에서 앞뒤로 11칸 (길이 약 5.5)
   const grng = mulberry(levelNo * 31 + 5);   // 다른 배치(rng)를 바꾸지 않게 따로
   const gravelOk = i => {
-    for (let k = i - GR - 6; k <= i + GR + 6; k++) { const q = samples[k]; if (!q || q.fall || q.ramp || q.gap || q.fork || q.lift || q.land || q.slide || q.stone || q.pool || q.loopZone || q.island || q.jet) return false; }
+    for (let k = i - GR - 6; k <= i + GR + 6; k++) { const q = samples[k]; if (!q || q.fall || q.ramp || q.gap || q.fork || q.lift || q.land || q.slide || q.stone || q.pool || q.loopZone || q.island || q.jet || q.rail) return false; }
     return !nearCliff(i) && [...logs, ...whirls, ...crabs, ...mills, ...fountains, ...boosts].every(o => Math.abs(o.idx - i) > GR + 10);
   };
   const pebbleGeo = new THREE.DodecahedronGeometry(1, 0);
@@ -1600,7 +1613,7 @@ function buildLevelWorld(def) {
   const coinMat = toon(0xffc83d, { emissive: 0x5a3c00 }), coinOutlineMat = new THREE.MeshBasicMaterial({ color: 0x6b3f00, side: THREE.BackSide });
   const objIdx = [...logs, ...whirls, ...crabs, ...mills, ...fountains, ...boosts].map(o => o.idx);
   for (const gv of gravels) for (let k = gv.i0; k <= gv.i1; k += 4) objIdx.push(k);   // 자갈밭 위엔 코인 없음
-  const coinFree = k => { const q = samples[k]; return !!q && k < N - 50 && !q.gap && !q.ramp && !q.fall && !q.lift && !q.fork && !q.land && !q.slide && !q.stone && !q.race && !q.pool && !q.loopZone && objIdx.every(o => Math.abs(o - k) > 7); };
+  const coinFree = k => { const q = samples[k]; return !!q && k < N - 50 && !q.rail && !q.gap && !q.ramp && !q.fall && !q.lift && !q.fork && !q.land && !q.slide && !q.stone && !q.race && !q.pool && !q.loopZone && objIdx.every(o => Math.abs(o - k) > 7); };
   const addCoin = (k, off) => {
     const q = samples[k], m = new THREE.Mesh(coinGeo, coinMat), x = q.x + q.nx * off, z = q.z + q.nz * off;
     const cy = q.y + (q.bank || 0) * off;
@@ -1624,6 +1637,79 @@ function buildLevelWorld(def) {
     const fv = samples[a].fv, fs = samples[a].fside;
     if (fv !== 'long' && fv !== 'short') continue;
     for (let k = a + 3; k < b - 2; k += 8) { const q = samples[k]; addCoin(k, (q.ic + fs * q.ih + fs * q.w) / 2); }
+  }
+  // 🚃 광산 기차: 승강장 + 레일(침목·받침 다리) + 기차 1칸 + 갈림 레일 (한쪽 🪙 코인, 한쪽 ⚡ 빠른 길) + 끝 범퍼
+  const carts = [];
+  for (const [a, b] of runs(samples, 'rail')) {
+    const crng = mulberry(levelNo * 53 + a);
+    const coinSide = crng() < 0.5 ? 1 : -1;   // 코인 레일 쪽 (1 = 왼쪽)
+    const iron = toon(0x6c6f78), wood = toon(0x8a5a32), dark = toon(0x5c3b1e);
+    const laneOf = (s, side) => side * (side === coinSide ? s.rlaneW : s.rlane);   // 갈림 구간에서 각 레일 가운데 (그 밖에선 0). 코인 레일은 바깥으로 크게 돎
+    const RY = 0.16;   // 레일 윗면 높이
+    for (const side of [1, -1]) {
+      for (const g of [-CART_GAUGE, CART_GAUGE]) {   // 레일 두 줄 (쇠)
+        add(ribbon(samples, a, b, s => laneOf(s, side) + g + 0.035, RY, s => laneOf(s, side) + g - 0.035, RY, iron));
+        add(ribbon(samples, a, b, s => laneOf(s, side) + g + 0.035, RY - 0.07, s => laneOf(s, side) + g + 0.035, RY, iron));
+        add(ribbon(samples, a, b, s => laneOf(s, side) + g - 0.035, RY - 0.07, s => laneOf(s, side) + g - 0.035, RY, iron));
+      }
+    }
+    const tieGeo = new THREE.BoxGeometry(1, 1, 1);
+    for (let i = a; i <= b; i += 2) {   // 침목: 갈림 구간에선 레일마다 하나씩
+      const s = samples[i], yaw = Math.atan2(-s.tx, -s.tz);
+      for (const side of s.rlane > 0.05 ? [1, -1] : [1]) {
+        const lat = laneOf(s, side), t = new THREE.Mesh(tieGeo, wood);
+        t.scale.set(CART_GAUGE * 2 + 0.36, 0.08, 0.16); t.position.set(s.x + s.nx * lat, s.y + RY - 0.11, s.z + s.nz * lat); t.rotation.y = yaw; add(t);
+      }
+      if ((i - a) % 20 === 0) {   // 나무 받침 다리 (호수 쪽 아래로, 듬성듬성)
+        for (const side of s.rlane > 0.05 ? [1, -1] : [1]) for (const g of [-1, 1]) {
+          const lat = laneOf(s, side) + g * (CART_GAUGE + 0.12), h = s.y - BASE_D - LAKE_Y + 0.6;
+          if (h < 0.5) continue;
+          const leg = new THREE.Mesh(tieGeo, dark); leg.scale.set(0.13, h, 0.13);
+          leg.position.set(s.x + s.nx * lat, s.y + RY - 0.15 - h / 2, s.z + s.nz * lat); leg.rotation.y = yaw; add(leg);
+        }
+      }
+    }
+    // 승강장(나무 발판) + 기둥 + 등불, 물길 끝 단면
+    const s0 = samples[a], yaw0 = Math.atan2(-s0.tx, -s0.tz), st = samples[Math.min(b, a + 10)];
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(s0.w * 2 + 0.6, 0.16, 2.8), toon(0xc98f5a));
+    deck.position.set(s0.x + s0.tx * 1.2, s0.y + 0.02, s0.z + s0.tz * 1.2); deck.rotation.y = yaw0; add(deck);
+    for (const sg of [1, -1]) {
+      const px = s0.x + s0.tx * 1.2 + s0.nx * sg * (s0.w + 0.15), pz = s0.z + s0.tz * 1.2 + s0.nz * sg * (s0.w + 0.15);
+      const post = new THREE.Mesh(tieGeo, dark); post.scale.set(0.16, 1.9, 0.16); post.position.set(px, s0.y + 0.95, pz); add(post);
+      const lamp = new THREE.Mesh(sphLow, new THREE.MeshBasicMaterial({ color: 0xffd76a })); lamp.scale.setScalar(0.13); lamp.position.set(px, s0.y + 1.95, pz); group.add(lamp);
+    }
+    const beam = new THREE.Mesh(tieGeo, dark); beam.scale.set(s0.w * 2 + 0.6, 0.16, 0.2); beam.position.set(s0.x + s0.tx * 1.2, s0.y + 1.85, s0.z + s0.tz * 1.2); beam.rotation.y = yaw0; add(beam);
+    const signT = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTex('⛏️🚃'), transparent: true, depthWrite: false }));
+    signT.scale.set(1.3, 0.65, 1); signT.position.set(s0.x + s0.tx * 1.2, s0.y + 2.35, s0.z + s0.tz * 1.2); group.add(signT);
+    for (const [k, sg] of [[a, 1], [b, -1]]) {   // 물길이 끝나고 다시 시작하는 곳 단면
+      const q = samples[k], face = new THREE.Mesh(new THREE.BoxGeometry(q.w * 2 + WALL_T * 2, BASE_D + 0.02, 0.18), stoneMat());
+      face.position.set(q.x - q.tx * sg * 0.05, q.y - BASE_D / 2, q.z - q.tz * sg * 0.05); face.rotation.y = Math.atan2(-q.tx, -q.tz); add(face);
+    }
+    // 갈림 레일 표지판 (갈라지기 조금 앞): 코인 쪽 🪙, 빠른 쪽 ⚡
+    let sp = a; while (sp < b && samples[sp].rlane < 0.05) sp++;
+    let ep = sp; while (ep < b && samples[ep].rlane > 0.05) ep++;
+    const sgn = samples[Math.max(a, sp - 14)];
+    for (const side of [1, -1]) {
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTex(side === coinSide ? '🪙' : '⚡'), transparent: true, depthWrite: false }));
+      spr.scale.setScalar(0.8); spr.position.set(sgn.x + sgn.nx * side * 1.15, sgn.y + 1.3, sgn.z + sgn.nz * side * 1.15); group.add(spr);
+    }
+    // 🪙 코인 레일: 갈림 구간 내내 코인 줄 / ⚡ 빠른 레일: 화살표
+    for (let i = sp + 8; i < ep - 6; i += 14) {   // 코인은 예전의 2/3
+      const s = samples[i], lat = laneOf(s, coinSide), m = new THREE.Mesh(coinGeo, coinMat), x = s.x + s.nx * lat, z = s.z + s.nz * lat;
+      const ol = new THREE.Mesh(coinGeo, coinOutlineMat); ol.scale.set(1.2, 1.2, 1.9); m.add(ol);
+      m.position.set(x, s.y + 1.05, z); m.castShadow = true; group.add(m);
+      coins.push({ m, x, y: s.y + 0.6, z, idx: i, taken: false });
+    }
+    group.add(ribbon(samples, sp + 2, ep - 2, s => laneOf(s, -coinSide) + 0.28, RY + 0.01, s => laneOf(s, -coinSide) - 0.28, RY + 0.01, boostMatSparse, 3.3));
+    // 끝 범퍼 (빨강·흰 줄무늬)
+    const se = samples[b - 2], bump = new THREE.Mesh(new THREE.BoxGeometry(CART_GAUGE * 2 + 0.5, 0.45, 0.3), toon(0xe03131));
+    bump.position.set(se.x, se.y + RY + 0.2, se.z); bump.rotation.y = Math.atan2(-se.tx, -se.tz); add(bump);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(CART_GAUGE * 2 + 0.52, 0.12, 0.32), toon(0xffffff)); stripe.position.copy(bump.position); stripe.rotation.copy(bump.rotation); add(stripe);
+    // 기차 1칸
+    const cart = makeMineCart(); group.add(cart);
+    const k = { a, b, sp, ep, coinSide, cart, exitI: b - 7, samples };
+    placeCartAt(k, a + 4, 0);
+    carts.push(k);
   }
   // 🎯 멀리뛰기 과녁: 착지 수영장 위, 보통 속도로 날아오면 떨어질 자리 근처 (좌우는 랜덤)
   const targets = [];
@@ -1653,7 +1739,7 @@ function buildLevelWorld(def) {
     group.add(ribbon(samples, a, b, s => s.w - 0.15, 0.05, s => -s.w + 0.15, 0.05, boostMatSparse, 3.3));
     for (let k = a + 6; k < b - 2; k += 7) { const q = samples[k]; addCoin(k, Math.sin((k - a) * 0.09) * (q.w - 0.55)); }
   }
-  return { cliffSplash, gravels, loops, steam, theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, homeCtx, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock, fountains, boosts, frogs, coins, limit0, targets, race, raceK: RACE, racers, gapArcs, rings, waves,
+  return { carts, cliffSplash, gravels, loops, steam, theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, homeCtx, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock, fountains, boosts, frogs, coins, limit0, targets, race, raceK: RACE, racers, gapArcs, rings, waves,
     raceObs: RACE ? [...logs.map(L => ({ idx: L.idx, lo: L.lo, hi: L.hi })), ...whirls.map(w => ({ idx: w.idx, lo: w.lat - w.R, hi: w.lat + w.R }))] : [] };
 }
 
@@ -2334,6 +2420,7 @@ const totalStars = () => Object.values(save.missions || {}).reduce((a, m) => a +
 // 테스트 모드: 꾸미기 전부 열기. 주소 뒤에 ?unlock=1 → 켜짐, ?unlock=0 → 꺼짐 (이 브라우저에 저장됨). 별 기록은 그대로
 let TEST_UNLOCK = false;
 try {
+  if (!DEV_BUILD) throw 0;   // 출시 앱(안드로이드)에서는 테스트 모드 없음
   const q = new URLSearchParams(location.search).get('unlock');
   if (q === '1') localStorage.setItem('duckwaterway.unlockAll', '1');
   if (q === '0') localStorage.removeItem('duckwaterway.unlockAll');
@@ -2567,8 +2654,10 @@ function makeAccessory(id) {
     // 🚁 프로펠러 헬멧: 분홍 헬멧 + 까만 테두리·끈 + 꼭대기에서 빙글빙글 도는 노란 프로펠러
     // 앞쪽을 살짝 들어 올려(뒤로 기울여) 안경과 겹치지 않게
     const h = new THREE.Group(); h.position.set(0, 0.88, -0.19); h.rotation.x = 0.3; g.add(h);
-    const pink = M(0xffa8c5);
-    addOutlined(h, new THREE.SphereGeometry(1, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), pink, V(0, 0, 0), V(0.34, 0.34, 0.34), true, 0.04);
+    // 🌈 빨주노초파남보 조각이 옆으로 빙 둘러 (비치볼처럼)
+    const RB = [0xff4d4d, 0xff9f1c, 0xffe14d, 0x51cf66, 0x339af0, 0x3b5bdb, 0x9c5de6];
+    for (let k = 0; k < 7; k++) { const seg = new THREE.Mesh(new THREE.SphereGeometry(1, 6, 12, k * Math.PI * 2 / 7, Math.PI * 2 / 7, 0, Math.PI / 2), toon(RB[k])); seg.scale.setScalar(0.34); h.add(seg); }
+    const hol = new THREE.Mesh(new THREE.SphereGeometry(1, 22, 12, 0, Math.PI * 2, 0, Math.PI / 2), outlineMat); hol.scale.setScalar(0.355); h.add(hol);   // 윤곽선
     const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 8, 30), M(0x2b2b33)); rim.rotation.x = Math.PI / 2; h.add(rim);   // 까만 테두리
     for (const sx of [-1, 1]) {
       const strap = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.34, 6), M(0x2b2b33));   // 턱끈
@@ -3066,7 +3155,7 @@ function resetDuck() {
   let si = START_I, lat0 = 0;
   if (world.raceK && raceStart) { while (si < world.samples.length - 1 && world.samples[si + 1].d <= raceStart.d) si++; lat0 = raceStart.lat; }
   const s = world.samples[si];
-  Object.assign(P, { x: s.x + s.nx * lat0, y: s.y, z: s.z + s.nz * lat0, vx: 0, vy: 0, vz: 0, idx: si, lat: lat0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false, bigAir: false, onSlide: false, cliffAir: false, diveT: 0, skip: 0, loop: null, loopCool: 0, onGravel: false, vliftRun: false, postLiftT: 0 });
+  Object.assign(P, { x: s.x + s.nx * lat0, y: s.y, z: s.z + s.nz * lat0, vx: 0, vy: 0, vz: 0, idx: si, lat: lat0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false, bigAir: false, onSlide: false, cliffAir: false, diveT: 0, skip: 0, loop: null, loopCool: 0, onGravel: false, vliftRun: false, postLiftT: 0, cart: null, cartCool: 0 });
   P.yaw = Math.atan2(-s.tx, -s.tz);
   duck.visible = true; duck.rotation.set(0, P.yaw, 0); duck.position.set(P.x, P.y, P.z);
   resetAmbient();
@@ -3076,6 +3165,7 @@ function resetDuck() {
   trail.length = 0; babyGot = 0; updateBabyHud(); resetStats();
   for (const f of world.family) f.duck.position.y = f.baseY;
   resetEagle();
+  for (const k of world.carts || []) placeCartAt(k, k.a + 4, 0);   // 🚃 기차는 승강장으로
 }
 
 function nearestIdx(x, z, hint) {
@@ -3121,6 +3211,98 @@ function airStep(dt, ax, az) {
     if (P.bigAir) { P.bigAir = false; scoreLanding(); }
   } else if (s.gap && P.y < s.y - 0.5) {            // 끊어진 곳으로 퐁당
     P.air = false; stats.jumpFails++; startFall(true);
+  }
+}
+
+// ---------- 🚃 광산 기차 ----------
+const CART_GAUGE = 0.3;   // 레일 두 줄 사이 반폭
+const CART_Y = 0.42;      // 기차 안에 앉은 오리 높이 (레일 샘플 높이 기준)
+const glyphTexCache = {};
+function glyphTex(txt) {   // 이모지 글자 텍스처 (표지판용)
+  if (glyphTexCache[txt]) return glyphTexCache[txt];
+  const c = document.createElement('canvas'); c.width = 128 * Math.max(1, [...txt].length > 2 ? 2 : 1); c.height = 128;
+  const g = c.getContext('2d'); g.font = '96px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(txt, c.width / 2, 70);
+  return (glyphTexCache[txt] = new THREE.CanvasTexture(c));
+}
+function makeMineCart() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const rust = toon(0xb5651d), band = toon(0x4a4e57), inside = toon(0x5c3b1e);
+  const box = (w, h, d, m, x, y, z) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); body.add(b); return b; };
+  // 오리가 쏙 들어가 앉을 만큼 큼직하게 (폭 1.2 · 길이 1.5)
+  const W = 1.2, L = 1.5, H = 0.5, Y = 0.55;
+  box(W, 0.06, L, inside, 0, 0.3, 0);                                   // 바닥
+  for (const sx of [-1, 1]) box(0.08, H, L, rust, sx * W / 2, Y, 0);     // 옆판
+  for (const sz of [-1, 1]) box(W, H, 0.08, rust, 0, Y, sz * L / 2);     // 앞뒤판
+  for (const y of [Y - H / 2 + 0.06, Y + H / 2 - 0.04]) {                // 쇠 띠
+    for (const sx of [-1, 1]) box(0.1, 0.06, L + 0.02, band, sx * (W / 2 + 0.01), y, 0);
+    for (const sz of [-1, 1]) box(W + 0.02, 0.06, 0.1, band, 0, y, sz * (L / 2 + 0.01));
+  }
+  const ol = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, H + 0.04, L + 0.04), outlineMat); ol.position.y = Y; ol.scale.setScalar(1.02); body.add(ol);
+  const wheels = [];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12), band);
+    w.rotation.z = Math.PI / 2; w.position.set(sx * (CART_GAUGE + 0.02), 0.22, sz * 0.5); body.add(w); wheels.push(w);
+    const hub = new THREE.Mesh(sphLow, toon(0xffd43b)); hub.scale.setScalar(0.04); hub.position.set(sx * (CART_GAUGE + 0.065), 0.22, sz * 0.5); body.add(hub);
+  }
+  g.userData = { body, wheels };
+  return g;
+}
+// 기차를 레일 샘플 i (+ 다음 샘플 쪽으로 frac) 의 옆 위치 lat 에 놓고 경사만큼 앞뒤로 기울임
+function placeCartAt(k, i, lat, frac = 0, smooth = 0) {
+  const SS = k.samples;
+  const s = SS[i], n = SS[Math.min(i + 1, SS.length - 1)], f = frac;
+  const x = s.x + (n.x - s.x) * f, y = s.y + (n.y - s.y) * f, z = s.z + (n.z - s.z) * f;
+  const pa = SS[Math.max(0, i - 3)], pb = SS[Math.min(SS.length - 1, i + 3)];
+  const pitch = Math.atan2(pb.y - pa.y, Math.hypot(pb.x - pa.x, pb.z - pa.z) || 1);
+  k.cart.position.set(x + s.nx * lat, y, z + s.nz * lat);
+  const ta = SS[Math.max(0, i - 4)], tb = SS[Math.min(SS.length - 1, i + 4)];
+  const bend = (tb.tx - ta.tx) * s.nx + (tb.tz - ta.tz) * s.nz;   // + : 왼쪽으로 휨
+  const yaw = Math.atan2(-s.tx, -s.tz), roll = clamp(-bend * 1.1, -0.35, 0.35);   // 커브에서 바깥쪽으로 살짝 기욺
+  k.cart.rotation.order = 'YXZ';
+  if (smooth) {   // 타는 중: 기울기·방향이 샘플마다 툭툭 바뀌지 않게 부드럽게 따라감
+    const r = k.cart.rotation, kk = Math.min(1, smooth * 10);
+    let dy = yaw - r.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    r.set(r.x + (pitch - r.x) * kk, r.y + dy * kk, r.z + (roll - r.z) * kk);
+  } else k.cart.rotation.set(pitch, yaw, roll);
+}
+// 기차 타는 중: 레일을 따라 자동으로 굴러감. 내리막에서 빨라지고 오르막에서 느려짐. 갈라지기 전에 좌우로 기울여 레일 선택
+function cartStep(dt, ax, az) {
+  const C = P.cart, k = C.k, S = world.samples, def = LEVELS[levelIdx];
+  let s = S[C.i];
+  const lin = (ax * s.nx + az * s.nz) / INPUT_ACC;   // + = 왼쪽으로 기울임
+  if (C.i < k.sp - 2 && Math.abs(lin) > 0.25) {
+    const ch = lin > 0 ? 1 : -1;
+    if (ch !== C.choice) { C.choice = ch; Sfx.click(); }
+  }
+  const nx = S[Math.min(C.i + 1, k.b)], dy = (nx.y - s.y) / Math.max(0.05, nx.d - s.d);
+  const onFast = C.i >= k.sp && C.i <= k.ep && C.choice === -k.coinSide && s.rlane > 0.3;
+  C.v += -dy * 16 * dt;                                       // 내리막 가속, 오르막 감속 (쌩쌩)
+  if (onFast) C.v += 10 * dt;                                 // ⚡ 빠른 레일
+  const vMin = def.flow * 2.4;
+  if (C.v < vMin) C.v += (vMin - C.v) * Math.min(1, 2.5 * dt);   // 오르막에서 너무 느려지면 부드럽게 다시 붙음 (뚝 멈칫하지 않게)
+  C.v = clamp(C.v, def.flow * 1.6, onFast ? 28 : 21);         // 예전의 2배 속도
+  if (onFast && !C.fastFx) { C.fastFx = true; Sfx.whoosh(); }
+  const lk = C.choice === k.coinSide ? 'rlaneW' : 'rlane';   // 고른 레일의 옆 위치
+  const s1 = S[Math.min(C.i + 1, k.b)], dl = (s1[lk] - s[lk]) / Math.max(0.05, s1.d - s.d);
+  const coinSlow = lk === 'rlaneW' ? 1 - 0.2 * clamp((s.rlaneW - 0.3) / 1.5, 0, 1) : 1;   // 🪙 코인 레일은 빙 돌아가는 만큼 더 오래 걸림 (서서히)
+  C.d += C.v * coinSlow * dt / Math.sqrt(1 + dl * dl);
+  while (C.i < k.b && S[C.i + 1].d <= C.d) C.i++;
+  s = S[C.i];
+  const n = S[Math.min(C.i + 1, k.b)], f = clamp((C.d - s.d) / Math.max(0.01, n.d - s.d), 0, 1);
+  const lat = C.choice * (s[lk] + (n[lk] - s[lk]) * f);
+  placeCartAt(k, C.i, lat, f, dt);
+  P.x = k.cart.position.x; P.z = k.cart.position.z; P.y = k.cart.position.y + CART_Y;
+  P.vx = s.tx * C.v; P.vz = s.tz * C.v; P.vy = 0;
+  P.idx = C.i; P.lat = lat; P.prog = C.d; P.slope = 0;
+  for (const w of k.cart.userData.wheels) w.rotation.x += C.v * dt / 0.13;   // 바퀴 굴러감
+  C.clack -= C.v * dt;
+  if (C.clack <= 0) { C.clack = 1.6; Sfx.clack(); }            // 덜컹
+  if (C.i >= k.exitI) {   // 🏁 끝 범퍼에 쿵 → 오리만 앞으로 붕 날아서 물길로 풍덩
+    P.cart = null; P.cartCool = 1.2;
+    const v = clamp(C.v, def.flow * 1.4, def.flow * 2.2);
+    P.vx = s.tx * v; P.vz = s.tz * v; P.vy = 3.2; P.air = true;
+    Sfx.bump(); Sfx.quack(1.5); burst(P.x, P.y, P.z, 10, 2, 0.08, 0.5);
   }
 }
 
@@ -3197,6 +3379,17 @@ function physicsStep(dt) {
     return;
   }
   if (P.loopCool > 0) P.loopCool -= dt;
+  if (P.cartCool > 0) P.cartCool -= dt;
+  if (!P.cart && !P.air && !(P.cartCool > 0) && s.rail && world.carts) {   // 🚃 승강장에 닿으면 기차에 쏙
+    const k = world.carts.find(q => P.idx >= q.a && P.idx <= q.b);
+    if (k && P.idx < k.exitI) {
+      const i = Math.max(P.idx, k.a + 4);
+      P.cart = { k, i, d: S[i].d, v: Math.max(def.flow * 2.4, Math.hypot(P.vx, P.vz)), choice: P.lat > 0.3 ? 1 : P.lat < -0.3 ? -1 : k.coinSide, clack: 0.5, fastFx: false };
+      Sfx.bump(); Sfx.quack(1.3); burst(P.x, P.y + 0.3, P.z, 8, 1.6, 0.07, 0.4);
+      if (!world.cartHint) { world.cartHint = true; showToast(t('cartToast'), 2200); }
+    }
+  }
+  if (P.cart) { cartStep(dt, ax, az); return; }
   if (P.loop) {   // 🎢 루프 타는 중: 관을 따라 자동으로 한 바퀴 (조작 없음)
     const Lp = P.loop, L = Lp.L;
     Lp.th += (Math.PI * 2 / LOOP_T) * dt * (1.15 - 0.3 * Math.sin(Lp.th / 2));   // 꼭대기에서 살짝 느려짐
@@ -3749,13 +3942,14 @@ function respawn() {
     i = Math.max(START_I, i - 16);
   }
   const s = S[i], flow = LEVELS[levelIdx].flow;
-  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: s.tx * flow * 0.5, vz: s.tz * flow * 0.5, vy: 0, idx: i, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false, bigAir: false, onSlide: false, hopAir: false, cliffAir: false, diveT: 0, skip: 0, loop: null, loopCool: 0, onGravel: false, vliftRun: false, postLiftT: 0 });
+  Object.assign(P, { x: s.x, y: s.y, z: s.z, vx: s.tx * flow * 0.5, vz: s.tz * flow * 0.5, vy: 0, idx: i, lat: 0, prog: s.d, roll: 0, spin: 0, slope: 0, inFall: false, air: false, held: null, boostT: 0, forkSide: 0, inFast: false, bigAir: false, onSlide: false, hopAir: false, cliffAir: false, diveT: 0, skip: 0, loop: null, loopCool: 0, onGravel: false, vliftRun: false, postLiftT: 0, cart: null, cartCool: 0 });
   P.yaw = Math.atan2(-s.tx, -s.tz);
   duck.visible = true; duck.rotation.set(0, P.yaw, 0); duck.userData.bob.rotation.set(0, 0, 0);
   trail.length = 0;   // 따라오던 아기 오리들도 바로 뒤로
   let k = 0;
   for (const b of world.babies) if (b.state === 'follow') { k++; b.x = s.x - s.tx * k; b.z = s.z - s.tz * k; b.y = s.y; }
   shieldT = Math.max(shieldT, 1.5);   // 다시 출발 직후 잠깐 보호
+  for (const k of world.carts || []) if (i < k.exitI) placeCartAt(k, Math.max(k.a + 4, Math.min(i, k.exitI - 1)), 0);   // 🚃 기차 앞에서 다시 출발하면 기차도 제자리
   burst(P.x, P.y + 0.2, P.z, 14, 2, 0.08, 0.5);
   Sfx.quack(1.3);
   state = 'playing';
@@ -3770,7 +3964,7 @@ function trySpawnHeart(chance) {
   if (!world || heartItem || hearts > 3 || hearts >= maxHearts() || heartSpawns >= HEART_MAX_PER_LEVEL || Math.random() > chance) return;
   const S = world.samples, N = S.length;
   let i = P.idx + 40 + Math.floor(Math.random() * 25);   // 10~16 정도 앞
-  while (i < N - 20 && (S[i].fall || S[i - 1].fall || S[i].gap || S[i].ramp || S[i].fork || S[i].stone)) i += 4;
+  while (i < N - 20 && (S[i].fall || S[i - 1].fall || S[i].gap || S[i].ramp || S[i].fork || S[i].stone || S[i].rail)) i += 4;
   if (i >= N - 20) return;
   const s = S[i], off = (Math.random() - 0.5) * 0.8 * s.w;
   const g = new THREE.Group();
@@ -4209,7 +4403,7 @@ function animateDuck(dt) {
 
     // 물보라 이펙트
     splashT -= dt;
-    if (splashT <= 0 && !P.air) {
+    if (splashT <= 0 && !P.air && !P.cart) {
       splashT = state === 'countdown' ? 0.12 : 0.07;   // 출발 전엔 발차기 물보라만 조금
       const dp = duck.position, bx = dp.x + Math.sin(P.yaw) * 0.45, bz = dp.z + Math.cos(P.yaw) * 0.45;
       const rx = Math.cos(P.yaw) * 0.32, rz = -Math.sin(P.yaw) * 0.32;
@@ -4320,8 +4514,22 @@ function animateFamily(dt) {
 // ---------- 메인 루프 ----------
 let lastT = performance.now(), acc = 0;
 const FIXED = 1 / 120;
+// 📱 게임 중 화면 꺼짐 방지: 기울기로 조종하면 화면을 안 만져서 폰이 어두워지거나 꺼질 수 있음
+// 게임(카운트다운·플레이·떨어짐) 중에만 Screen Wake Lock 을 켜고, 일시정지·메뉴·결과 화면에선 끔
+let wakeLock = null, wakeBusy = false, wakeRetryT = 0;
+let nativeAwake = null;   // 앱(안드로이드)에서는 네이티브로 화면 켜 둠 (KeepAwake 플러그인 · build-apk.sh 가 넣음)
+function updateWakeLock() {
+  const want = !document.hidden && (state === 'playing' || state === 'countdown' || state === 'falling' || state === 'respawning');
+  const KA = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KeepAwake;
+  if (KA && KA.set) { if (want !== nativeAwake) { nativeAwake = want; KA.set({ on: want }).catch(() => {}); } return; }
+  if (wakeBusy || !navigator.wakeLock || want === !!wakeLock || (want && performance.now() < wakeRetryT)) return;
+  wakeBusy = true;
+  if (want) navigator.wakeLock.request('screen').then(l => { wakeLock = l; l.addEventListener('release', () => { if (wakeLock === l) wakeLock = null; }); }).catch(() => { wakeRetryT = performance.now() + 5000; }).finally(() => { wakeBusy = false; });   // 안 되면 5초 뒤 다시
+  else { const l = wakeLock; wakeLock = null; l.release().catch(() => {}).finally(() => { wakeBusy = false; }); }
+}
 function frame(now) {
   requestAnimationFrame(frame);
+  updateWakeLock();
   const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   tick(dt);
   updateShopDecor();
@@ -4707,7 +4915,7 @@ function updateEagle(dt) {
   if (e.phase === 'wait') {
     if (state !== 'playing' || P.prog / world.total < e.at) return;
     if (P.air || P.loop || P.held || P.diveT > 0) return;
-    for (let i = P.idx; i < Math.min(S.length, P.idx + 48); i++) if (S[i].gap || S[i].cliff || S[i].loopZone || S[i].ramp) return;   // 점프·절벽·루프 앞에선 다음에
+    for (let i = P.idx; i < Math.min(S.length, P.idx + 48); i++) if (S[i].gap || S[i].cliff || S[i].loopZone || S[i].ramp || S[i].rail) return;   // 점프·절벽·루프·기차 앞에선 다음에
     if (P.prog / world.total > 0.82) { e.phase = 'done'; return; }
     e.phase = 'chase'; e.t = 0; e.dist = EAGLE_START;
     const b = eagleBehind(e.dist); g.position.set(b.x, b.s.y + 7, b.z); g.visible = true; sh.visible = true;
@@ -5201,6 +5409,21 @@ const syncMute = () => { muteBtn.textContent = Sfx.isMuted() ? '🔇' : '🔊'; 
 muteBtn.onclick = () => { Sfx.init(); Sfx.setMuted(!Sfx.isMuted()); syncMute(); };
 syncMute();
 
+// 📱 안드로이드 뒤로 가기 버튼 (앱에서만): 게임 중엔 일시정지, 메뉴에선 한 단계 뒤로, 첫 화면에서만 앱 종료
+(() => {
+  const App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+  if (!App || !App.addListener) return;
+  App.addListener('backButton', () => {
+    if (state === 'playing' || state === 'countdown') { pauseGame(); return; }
+    if (state === 'paused') { const b = document.querySelector('#popButtons button'); if (b) b.click(); return; }   // 계속하기
+    if (state === 'wardrobe') { if (wdPopCat) closeLookPop(); else $('#btnWardrobeBack').click(); return; }
+    if (state === 'shop') { closeShop(); return; }
+    if (state === 'levels') { $('#btnBackTitle').click(); return; }
+    if (state === 'title') App.exitApp();
+    // 도착·실패 화면에선 아무것도 안 함 (실수로 앱이 꺼지지 않게)
+  });
+})();
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { pauseGame(); Sfx.suspend(); } else Sfx.resume();
 });
@@ -5224,5 +5447,5 @@ showTitleScene();
 requestAnimationFrame(frame);
 
 // 디버그/테스트용 훅
-window.__duck = { P, get state() { return state; }, startLevel, LEVELS, input, keys, tick, respawn, get heartItem() { return heartItem; }, get hearts() { return hearts; }, get shieldT() { return shieldT; }, get world() { return world; }, get duck() { return duck; }, camera, renderer, scene, THREE, applyLook, get save() { return save; }, get iceberg() { return iceberg; }, get eagle() { return eagle; }, setIceT(v) { iceT = v; } };
+if (DEV_BUILD) window.__duck = { P, get state() { return state; }, startLevel, LEVELS, input, keys, tick, respawn, get heartItem() { return heartItem; }, get hearts() { return hearts; }, get shieldT() { return shieldT; }, get world() { return world; }, get duck() { return duck; }, camera, renderer, scene, THREE, applyLook, get save() { return save; }, get iceberg() { return iceberg; }, get eagle() { return eagle; }, setIceT(v) { iceT = v; } };
 })();
