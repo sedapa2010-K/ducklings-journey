@@ -301,6 +301,8 @@ h1 {
 .look-btn.on { background: #fff4c2; box-shadow: 0 4px 0 var(--yellow-dark); outline: 3px solid var(--yellow); }
 .look-btn.locked { opacity: .5; cursor: default; }
 .look-btn.reward { background: #fdeef3; }
+.look-btn .look-buy { margin-top: 2px; font-size: 10.5px; padding: 1px 6px; border-radius: 10px; background: #ffe066; color: #7a4b00; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.look-btn.locked.buy:not(.poor) { opacity: .85; cursor: pointer; }
 .new-look { display: block; margin-top: 8px; font-size: 15px; color: #e8457a; animation: pop .5s .8s both cubic-bezier(.2, 1.8, .4, 1); }
 #wardrobe .panel.sheet { max-height: 60cqh; padding-top: 12px; }
 .look-btn { padding: 6px 4px 5px; }

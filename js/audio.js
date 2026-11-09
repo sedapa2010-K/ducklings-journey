@@ -119,6 +119,41 @@ const Sfx = (() => {
     tone(2093, t + 0.26, 0.3, 'sine', 0.15);
   }
 
+  function eagle() { // 🦅 독수리 울음: 끼이이야아~ (높게 떨리다 내려감) + 날갯짓 바람
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [[0, 1], [0.42, 0.85]].forEach(([d, p]) => {
+      const t0 = t + d, dur = 0.55;
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(2300 * p, t0);
+      o.frequency.linearRampToValueAtTime(2900 * p, t0 + 0.08);
+      o.frequency.exponentialRampToValueAtTime(1500 * p, t0 + dur);
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 38;   // 목 떨림
+      const lg = ctx.createGain(); lg.gain.value = 140 * p; lfo.connect(lg); lg.connect(o.frequency);
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 2600 * p; f.Q.value = 3;
+      const g = ctx.createGain(); env(g, t0, 0.03, 0.22, dur);
+      o.connect(f); f.connect(g); g.connect(sfxBus);
+      o.start(t0); o.stop(t0 + dur + 0.05); lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+    });
+    for (let k = 0; k < 3; k++) noise(t + 0.9 + k * 0.22, 0.14, 420, 0.7, 0.18, 'lowpass');   // 퍼덕 퍼덕
+  }
+
+  function gravel() { // 🪨 자갈 위: 자글자글
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    for (let k = 0; k < 3; k++) noise(t + k * 0.035 + Math.random() * 0.02, 0.03, 2200 + Math.random() * 1800, 1.2, 0.09 + Math.random() * 0.05);
+  }
+
+  function swoop() { // 🦅 덮칠 때: 휘익 + 퍽
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2;
+    f.frequency.setValueAtTime(600, t); f.frequency.exponentialRampToValueAtTime(2600, t + 0.3);
+    const g = ctx.createGain(); env(g, t, 0.15, 0.35, 0.2);
+    s.connect(f); f.connect(g); g.connect(sfxBus); s.start(t); s.stop(t + 0.5);
+  }
+
   function whoosh() { // 소용돌이: 휘이잉
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -404,6 +439,6 @@ const Sfx = (() => {
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
 
-  return { init, setSong, quack, splash, bump, duckBump, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
+  return { init, setSong, quack, splash, bump, duckBump, eagle, swoop, gravel, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
            setMuted, isMuted: () => muted, setMusic, isMusicOn: () => musicOn, suspend, resume };
 })();
