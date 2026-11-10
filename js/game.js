@@ -37,6 +37,7 @@ const GYRO_DEAD_DEG = 2.5;
 // 개발용 로컬 서버(python serve.py → http://localhost:8123 등 포트 있음)에서만 테스트 기능을 켬.
 // 안드로이드 앱은 https://localhost (포트 없음) 라서 출시판에선 꺼짐
 const DEV_BUILD = location.protocol === 'http:' && location.port !== '';
+const PRIVACY_URL = 'https://sedapa2010-k.github.io/ducklings-journey/';   // 🔒 개인정보처리방침 (GitHub Pages · docs/index.html)
 const SAVE_KEY = 'duckwaterway.v1';
 let save = { unlocked: 1, best: {}, missions: {}, equip: {} };   // missions[레벨] = 성공한 미션 비트(1·2·4)
 try {
@@ -5302,6 +5303,9 @@ function showPauseMenu(prev) {
   const pt = document.createElement('div');   // ⏱ 누적 플레이 시간: 맨 아래
   pt.className = 'play-time'; pt.textContent = t('playTime', save.playTime || 0);
   $('#popButtons').appendChild(pt);
+  const pp = document.createElement('a');   // 🔒 개인정보처리방침 (앱에선 휴대폰 브라우저로 열림)
+  pp.className = 'privacy-link'; pp.href = PRIVACY_URL; pp.target = '_blank'; pp.rel = 'noopener'; pp.textContent = t('privacy');
+  $('#popButtons').appendChild(pp);
 }
 const musicLabel = () => Sfx.isMusicOn() ? t('musicOn') : t('musicOff');
 

@@ -248,6 +248,7 @@ h1 {
 .theme-test button { padding: 5px 8px; border-radius: 999px; font-size: 13px; white-space: nowrap; background: transparent; color: var(--ink); box-shadow: none; }
 .theme-test button.on { background: var(--yellow); box-shadow: 0 2px 0 var(--yellow-dark); }
 /* 일시정지 화면: 언어 선택 */
+.privacy-link { display: block; margin-top: 6px; font-size: 13px; color: #6b7c88; text-decoration: underline; text-align: center; }
 .lang-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 4px; font-size: 16px; }
 .pop-buttons .lang-row button {
   font-size: 16px; padding: 8px 14px; border-radius: 999px; background: #fff; box-shadow: 0 4px 0 #e8dcc6; opacity: .75;
