@@ -3177,7 +3177,7 @@ function resetDuck() {
   heartItem = null; heartTimer = HEART_CHECK; heartSpawns = 0;
   trail.length = 0; babyGot = 0; updateBabyHud(); resetStats();
   for (const f of world.family) f.duck.position.y = f.baseY;
-  resetEagle();
+  resetEagle(); hitFlashT = 0;
   for (const k of world.carts || []) placeCartAt(k, k.a + 4, 0);   // 🚃 기차는 승강장으로
 }
 
@@ -3280,9 +3280,25 @@ function placeCartAt(k, i, lat, frac = 0, smooth = 0) {
   } else k.cart.rotation.set(pitch, yaw, roll);
 }
 // 기차 타는 중: 레일을 따라 자동으로 굴러감. 내리막에서 빨라지고 오르막에서 느려짐. 갈라지기 전에 좌우로 기울여 레일 선택
+const CART_WAIT = 0, CART_HOP = 0.45;   // 🚃 탈 때: 바로 폴짝 (뛰는 동안 화면은 멈춰 있다가, 타고 나면 다시 따라감)
+const cartBoarding = () => state === 'playing' && P.cart && P.cart.board < CART_WAIT + CART_HOP;
 function cartStep(dt, ax, az) {
   const C = P.cart, k = C.k, S = world.samples, def = LEVELS[levelIdx];
   let s = S[C.i];
+  if (C.board < CART_WAIT + CART_HOP) {   // 승강장: 오리가 기차 안으로 폴짝 뛰어오름 (기차는 기다림)
+    if (C.board === 0) {
+      const lk0 = C.choice === k.coinSide ? 'rlaneW' : 'rlane';
+      placeCartAt(k, C.i, C.choice * s[lk0]);
+    }
+    C.board += dt;
+    const u = clamp((C.board - CART_WAIT) / CART_HOP, 0, 1), e = u * u * (3 - 2 * u), c = k.cart.position;
+    P.x = C.bx + (c.x - C.bx) * e; P.z = C.bz + (c.z - C.bz) * e;
+    P.y = C.by + (c.y + CART_Y - C.by) * e + Math.sin(Math.PI * u) * 0.9;
+    P.vx = P.vz = P.vy = 0; P.slope = 0;
+    if (u > 0 && !C.hopped) { C.hopped = true; Sfx.whoosh(); }
+    if (u < 1) return;
+    Sfx.bump(); Sfx.clack(); burst(c.x, c.y + 0.5, c.z, 10, 1.8, 0.07, 0.45);   // 쿵! 안착
+  }
   const lin = (ax * s.nx + az * s.nz) / INPUT_ACC;   // + = 왼쪽으로 기울임
   if (C.i < k.sp - 2 && Math.abs(lin) > 0.25) {
     const ch = lin > 0 ? 1 : -1;
@@ -3397,8 +3413,9 @@ function physicsStep(dt) {
     const k = world.carts.find(q => P.idx >= q.a && P.idx <= q.b);
     if (k && P.idx < k.exitI) {
       const i = Math.max(P.idx, k.a + 4);
-      P.cart = { k, i, d: S[i].d, v: Math.max(def.flow * 2.4, Math.hypot(P.vx, P.vz)), choice: P.lat > 0.3 ? 1 : P.lat < -0.3 ? -1 : k.coinSide, clack: 0.5, fastFx: false };
-      Sfx.bump(); Sfx.quack(1.3); burst(P.x, P.y + 0.3, P.z, 8, 1.6, 0.07, 0.4);
+      P.cart = { k, i, d: S[i].d, v: Math.max(def.flow * 2.4, Math.hypot(P.vx, P.vz)), choice: P.lat > 0.3 ? 1 : P.lat < -0.3 ? -1 : k.coinSide, clack: 0.5, fastFx: false,
+        board: 0, bx: P.x, by: P.y, bz: P.z };   // 🚃 폴짝 올라탐
+      Sfx.quack(1.3); burst(P.x, P.y + 0.3, P.z, 8, 1.6, 0.07, 0.4);
       if (!world.cartHint) { world.cartHint = true; showToast(t('cartToast'), 2200); }
     }
   }
@@ -4329,7 +4346,7 @@ function wardrobeDir() {
   return { x: a.tx / l, z: a.tz / l };
 }
 function updateCamera(dt) {
-  if (state === 'playing' || state === 'countdown') {
+  if ((state === 'playing' || state === 'countdown') && !cartBoarding()) {
     const g = lookAheadGoal(), k = damp(1.8, dt);
     look.x = lerp(look.x, g.x, k); look.z = lerp(look.z, g.z, k);
   }
@@ -4360,8 +4377,10 @@ function updateCamera(dt) {
     camTarget.set(mx + Math.sin(a) * R, c.y + H, mz + Math.cos(a) * R);
     lookTarget.set(mx, c.y + 0.7, mz);
   } else cameraGoal();
-  camera.position.lerp(camTarget, damp(state === 'win' ? 2.5 : 4, dt));
-  lookCur.lerp(lookTarget, damp(5, dt));
+  if (!cartBoarding()) {   // 🚃 기차로 뛰어오르는 동안엔 화면을 그대로 멈춰 둠 → 타고 나면 부드럽게 다시 따라감
+    camera.position.lerp(camTarget, damp(state === 'win' ? 2.5 : 4, dt));
+    lookCur.lerp(lookTarget, damp(5, dt));
+  }
   camera.lookAt(lookCur);
   // 꾸미기 화면에서는 화면을 위로 밀어 오리가 꾸미기 창 위 빈 공간 가운데에 오게
   const W = appEl.clientWidth, H = appEl.clientHeight;
@@ -4412,6 +4431,7 @@ function animateDuck(dt) {
     }
     const flap = state === 'win' || P.air || P.held ? Math.sin(elapsed * 22) * 0.8 : Math.sin(elapsed * 6) * 0.12;   // 점프 중엔 파닥파닥
     u.wingL.rotation.z = -flap; u.wingR.rotation.z = flap;
+    updateHitFlash(dt);
 
     // 물보라 이펙트
     splashT -= dt;
@@ -4880,6 +4900,44 @@ function updateWaves(dt) {
 // 🧊 설원 레벨(51~): 가끔 뒤에서 작은 빙산이 빠르게 미끄러져 와 앞질러 감. 부딪히면 하트 반 개
 // ---------- 🦅 독수리 (레벨 30~): 판마다 랜덤하게 한 번, 뒤에서 날아와 쫓아옴 ----------
 // 천천히 가면 따라잡혀서 한 번 치고 날아감 (하트 반 개). 열심히 앞으로 헤엄치면 따돌림
+// 💥 충격 효과: 새에게 채이면 오리가 노랗게 번쩍번쩍 + 만화 같은 노란 '팡!' 별이 터지고 오리가 부르르 떨림
+const impactTex = canvasTex(128, 128, (g, w, h) => {
+  const spikes = 11, cx = w / 2, cy = h / 2;
+  const star = (R, r) => { g.beginPath(); for (let i = 0; i < spikes * 2; i++) { const a = i / (spikes * 2) * Math.PI * 2 - Math.PI / 2, rr = i % 2 ? r : R * (0.85 + 0.15 * ((i * 7) % 3) / 2); g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.closePath(); };
+  star(62, 30); g.fillStyle = '#ff9a1f'; g.fill();
+  star(52, 25); g.fillStyle = '#ffe14d'; g.fill();
+  g.beginPath(); g.arc(cx, cy, 17, 0, Math.PI * 2); g.fillStyle = '#fffbe0'; g.fill();
+});
+const impactSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: impactTex, transparent: true, depthTest: false, depthWrite: false }));
+impactSprite.renderOrder = 10; impactSprite.visible = false; scene.add(impactSprite);
+const HIT_FLASH = 0.6;
+let hitFlashT = 0;
+function hitFlash() {
+  hitFlashT = HIT_FLASH;
+  const u = duck.userData;
+  if (!u.hitGlow) {   // 오리를 감싸는 노란 빛 (처음 한 번만 만듦)
+    u.hitGlow = new THREE.Mesh(sph, new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    u.hitGlow.scale.set(0.55, 0.6, 0.65); u.hitGlow.position.y = 0.5; u.bob.add(u.hitGlow);
+  }
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; spawnSprite(starTex, P.x, P.y + 0.7, P.z, Math.cos(a) * 2.2, 1.6 + Math.random(), Math.sin(a) * 2.2, 0.26, 0.6); }   // 별이 사방으로 튐
+}
+function updateHitFlash(dt) {
+  const u = duck.userData;
+  if (hitFlashT <= 0) { if (u.hitGlow) u.hitGlow.material.opacity = 0; impactSprite.visible = false; return; }
+  hitFlashT = Math.max(0, hitFlashT - dt);
+  const k = hitFlashT / HIT_FLASH, on = Math.sin((1 - k) * Math.PI * 9) > -0.2;   // 번쩍번쩍 깜빡임
+  u.hitGlow.material.opacity = on ? 0.75 * k + 0.15 : 0.05;
+  const shake = 0.07 * k;   // 부르르
+  duck.position.x += (Math.random() - 0.5) * shake * 2; duck.position.z += (Math.random() - 0.5) * shake * 2;
+  const p = 1 - k, sp = k > 0.45;   // '팡!' 별: 앞쪽 0.33초 동안 커지며 사라짐
+  impactSprite.visible = sp;
+  if (sp) {
+    const sc = (0.8 + p * 2.4) * duck.scale.x;
+    impactSprite.scale.set(sc, sc, 1); impactSprite.position.set(P.x, P.y + 0.6 * duck.scale.x, P.z);
+    impactSprite.material.opacity = Math.min(1, (k - 0.45) / 0.25); impactSprite.material.rotation = p * 0.6;
+  }
+}
+
 // 🦅 독수리(레벨 30~) · 🐦 까마귀(레벨 20~)
 // 이야기: 물길 옆 기둥 위에 앉아 있다가 → 오리가 다가오면 고개를 돌려 쳐다보고
 //        → 오리가 지나가면 날아올라 뒤를 쫓아옴. 천천히 가면 덮침 (독수리: 하트 -½, 까마귀: 코인을 훔쳐 감)
@@ -5040,7 +5098,7 @@ function updateEagle(dt) {
         e.phase = 'leave'; e.t = 0; e.hit = true;
         const sg = P.lat > 0 ? -1 : 1;   // 가운데 쪽으로 툭 (벽 없는 길에서 떨어지지 않게)
         P.vx = P.vx * 0.55 + s.nx * sg * 1.6; P.vz = P.vz * 0.55 + s.nz * sg * 1.6;
-        Sfx.swoop(); Sfx.bump(); Sfx.quack(1.5);
+        Sfx.swoop(); Sfx.bump(); Sfx.quack(1.5); hitFlash();
         burst(P.x, P.y + 0.5, P.z, 14, 2.4, 0.09, 0.6);
         for (let i = 0; i < 10; i++) spawnDrop(P.x, P.y + 0.7, P.z, (Math.random() - 0.5) * 2.5, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 2.5, 0.06, 0.9, toon(cfg.feather));   // 깃털
         const steal = e.kind === 'crow' ? Math.min(3, stats.coins, save.coins || 0) : 0;
