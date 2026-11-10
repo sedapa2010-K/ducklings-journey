@@ -119,6 +119,24 @@ const Sfx = (() => {
     tone(2093, t + 0.26, 0.3, 'sine', 0.15);
   }
 
+  function crow() { // 🐦 까마귀 울음: 까아악! 까아악! (낮고 거칠게 긁는 소리 + 섬뜩한 저음)
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    [0, 0.38, 0.7].forEach((d, i) => {
+      const t0 = t + d, dur = i === 2 ? 0.42 : 0.3, p = i === 2 ? 0.85 : 1;
+      const o = ctx.createOscillator(); o.type = 'sawtooth';
+      o.frequency.setValueAtTime(520 * p, t0); o.frequency.linearRampToValueAtTime(640 * p, t0 + 0.05); o.frequency.exponentialRampToValueAtTime(300 * p, t0 + dur);
+      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 70;   // 목이 긁히는 듯한 거친 소리
+      const lg = ctx.createGain(); lg.gain.value = 160; lfo.connect(lg); lg.connect(o.frequency);
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 950; f.Q.value = 1.6;
+      const g = ctx.createGain(); env(g, t0, 0.015, 0.3, dur);
+      o.connect(f); f.connect(g); g.connect(sfxBus);
+      o.start(t0); o.stop(t0 + dur + 0.05); lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+    });
+    tone(98, t, 1.1, 'triangle', 0.12); tone(92.5, t + 0.05, 1.1, 'triangle', 0.1);   // 섬뜩하게 어긋난 저음
+    for (let k = 0; k < 3; k++) noise(t + 1.15 + k * 0.16, 0.12, 480, 0.6, 0.16, 'lowpass');   // 퍼덕 퍼덕
+  }
+
   function eagle() { // 🦅 독수리 울음: 끼이이야아~ (높게 떨리다 내려감) + 날갯짓 바람
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -446,6 +464,6 @@ const Sfx = (() => {
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
 
-  return { init, setSong, quack, splash, bump, duckBump, eagle, swoop, gravel, clack, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
+  return { init, setSong, quack, splash, bump, duckBump, eagle, crow, swoop, gravel, clack, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
            setMuted, isMuted: () => muted, setMusic, isMusicOn: () => musicOn, suspend, resume };
 })();
