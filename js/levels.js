@@ -59,10 +59,11 @@ function V(depth) {
   return { t: 'V', len, depth, A: +(drop / len).toFixed(3), walls: 'both' };
 }
 // fv = 갈림길 종류, ns = 빠른 쪽이 좁아지기 시작하는 곳(0~1), sq = 섬이 빠른 쪽으로 밀리는 정도
-function K(len, side, w, ih, fv = 'classic', ns = 0.38, sq = 0.65) { return { t: 'S', len, walls: side > 0 ? 'R' : 'L', w, fork: true, fside: side, ih, fv, ns, sq }; }
+// 빠른 길 쪽에도 벽이 있음 (예전엔 빠른 쪽 난간이 없어서 떨어지기 쉬웠음)
+function K(len, side, w, ih, fv = 'classic', ns = 0.38, sq = 0.65) { return { t: 'S', len, walls: 'both', w, fork: true, fside: side, ih, fv, ns, sq }; }
 // 🔀 갈림길 종류: 기본 / 긴 섬(장애물 3개, 빠른 길에 코인) / 짧은 섬(꽃게 1마리, 빠른 길에 코인) / 넓은 섬(꽃게 2마리)
 const FORK_KINDS = ['classic', 'long', 'short', 'wide'];
-// 🔀↪ 굽은 갈림길: 같은 길이로 bend(도)만큼 휘어짐. 빠른 쪽(난간 없음)이 커브 바깥 → 빠르게 가면 바깥으로 밀려 떨어질 수 있음
+// 🔀↪ 굽은 갈림길: 같은 길이로 bend(도)만큼 휘어짐. 빠른 쪽이 커브 바깥
 function curveFork(k, bend) {
   const a = Math.abs(bend) * Math.PI / 180;
   return { ...k, t: 'C', angle: -k.fside * Math.abs(bend), radius: +(k.len / a).toFixed(2) };
@@ -280,14 +281,24 @@ function courseOverlaps(def, checkPond = true) {
       return long && w === 'none' ? outer : w;
     };
     const side = () => (rng() < 0.5 ? 1 : -1);
+    const pick = arr => arr[Math.floor(rng() * arr.length)];
+    // 코너 모양 조각들. 예전엔 좌우로 번갈아 꺾는 zig·S 와 90° 가 대부분이라 길이 지그재그로 비슷비슷했음
+    // → 같은 쪽으로 이어 도는 hook·sweep, 살짝 꺾는 kink, 여러 각도(30~150°)를 섞어 리듬이 달라지게
     const PATTERNS = [
-      { name: 'zig',   c: 2, w: 3, make: s => { const a = rng() < 0.3 ? 60 : 90; return [C(s * a, R, cw(s)), S(3 + rng() * 3, 'both'), C(-s * a, R, cw(-s))]; } },
+      { name: 'zig',   c: 2, w: 1.6, make: s => { const a = pick([45, 60, 90, 90]); return [C(s * a, R, cw(s)), S(3 + rng() * 3, 'both'), C(-s * a, R, cw(-s))]; } },
       { name: 'U',     c: 1, w: 2, make: s => [C(s * 180, R * 0.9, cw(s, true))] },
       { name: 'box',   c: 2, w: 2, make: s => [C(s * 90, R * 0.75, cw(s)), S(3 + rng() * 3, 'both'), C(s * 90, R * 0.75, cw(s))] },
       { name: 'round', c: 1, w: 2, make: s => [C(s * (120 + 15 * Math.floor(rng() * 5)), R * 1.5, cw(s, true))] },
-      { name: 'S',     c: 2, w: 2, make: s => { const a = 60 + 15 * Math.floor(rng() * 3); return [C(s * a, R, cw(s)), C(-s * a, R, cw(-s))]; } },
-      { name: 'turn',  c: 1, w: 2, make: s => [C(s * 90, R, cw(s))] },
+      { name: 'S',     c: 2, w: 1.2, make: s => { const a = 45 + 15 * Math.floor(rng() * 4); return [C(s * a, R, cw(s)), C(-s * a, R, cw(-s))]; } },
+      { name: 'turn',  c: 1, w: 2, make: s => { const a = pick([45, 60, 90, 120]); return [C(s * a, R * (a < 90 ? 1.3 : 1), cw(s, a > 100))]; } },
+      // 🪝 같은 쪽으로 두 번: 살짝 → 조금 더 (갈고리 모양, 합쳐서 75~105°)
+      { name: 'hook',  c: 2, w: 1.4, make: s => { const a = pick([30, 45]), b = pick([45, 60]); return [C(s * a, R * 1.2, cw(s)), S(2 + rng() * 3, 'both'), C(s * b, R, cw(s))]; } },
+      // 🌀 같은 쪽으로 세 번 연달아 휘어 도는 긴 커브 (합쳐서 90~120°)
+      { name: 'sweep', c: 3, w: 1.1, make: s => { const out = []; for (let j = 0; j < 3; j++) { const a = pick([30, 35, 40]); out.push(C(s * a, R * 1.15, cw(s))); if (j < 2) out.push(S(1.5 + rng() * 2.5, 'both')); } return out; } },
+      // ↗ 살짝만 꺾기 (30~45°)
+      { name: 'kink',  c: 1, w: 0.8, make: s => [C(s * pick([30, 40, 45]), R * 1.4, cw(s))] },
     ];
+    let lastPat = '', lastSign = 0;
     // 한 조각씩 붙이면서 매번 겹침 검사. 동쪽(오른쪽)에서 많이 벗어나는 방향은 뒤로 미룸
     const pieces = [S(8, 'both')];
     let c = 0, fi = 0, heading = 0;
@@ -296,13 +307,17 @@ function courseOverlaps(def, checkPond = true) {
     while (c < n) {
       const left = n - c;
       const cands = [];
-      for (const pat of PATTERNS) if (pat.c <= left)
+      for (const pat of PATTERNS) if (pat.c <= left && (pat.name !== 'sweep' || n >= 20))   // 🌀 3코너짜리는 코너 많은 레벨에서만 (짧은 레벨은 장치 넣을 자리가 모자람)
         for (const s of [1, -1]) {
-          const ps = pat.make(s), h = norm(heading + turnOf(ps));
+          const ps0 = pat.make(s), first = ps0.find(p => p.t === 'C');
+          const ps = first && Math.sign(first.angle) === lastSign ? [S(2.5, 'both'), ...ps0] : ps0;   // 같은 쪽 코너가 붙어서 하나로 합쳐 보이지 않게 짧은 직선
+          const h = norm(heading + turnOf(ps));
           // 서쪽(왼쪽)으로 가는 중이면 다시 돌아오는 조각을 우선. U/ㄷ/둥근 커브는 자주 나오게 가산점
           const wasWest = Math.abs(heading) > 135, goesWest = Math.abs(h) > 135;
-          const fancy = pat.name === 'U' || pat.name === 'box' || pat.name === 'round' ? 0.45 : 0;
-          cands.push({ pat, ps, h, score: rng() * pat.w + fancy - (wasWest && goesWest ? 2 : 0) - (Math.abs(h) > 60 && Math.abs(h) <= 135 ? 0.25 : 0) });
+          const fancy = pat.name === 'U' || pat.name === 'box' || pat.name === 'round' || pat.name === 'hook' || pat.name === 'sweep' ? 0.45 : 0;
+          const repeat = pat.name === lastPat ? 0.7 : 0;                 // 같은 조각 연달아 나오는 건 줄임
+          const sameWay = s === lastSign && Math.abs(h) <= 75 ? 0.25 : 0;                     // 앞 코너와 같은 쪽으로 이어 도는 것도 가끔 (좌우 번갈아만 꺾지 않게)
+          cands.push({ pat, ps, h, s, score: rng() * pat.w + fancy + sameWay - repeat - (wasWest && goesWest ? 2 : 0) - (Math.abs(h) > 60 && Math.abs(h) <= 135 ? 0.25 : 0) - Math.max(0, Math.abs(h) - 100) / (pat.name === 'U' || pat.name === 'round' ? 45 : 25) });   // 뒤(서쪽)로 많이 돌아갈수록 감점 → 길이 말려 들어가지 않게 (U턴·둥근 커브는 덜 깎음)
         }
       cands.sort((a, b) => b.score - a.score);
       let ok = null;
@@ -313,6 +328,7 @@ function courseOverlaps(def, checkPond = true) {
       if (!ok) return null;                     // 막다른 길 → 다른 시드로 다시
       for (const p of ok.ps) pieces.push(...gapCurve(p));
       heading = ok.h; c += ok.pat.c;
+      lastPat = ok.pat.name; { const cs = ok.ps.filter(p => p.t === 'C'); lastSign = Math.sign(cs[cs.length - 1].angle); }
       while (fi < fallAfter.length && fallAfter[fi] <= c) {
         if (bigAt.includes(fi) && bigDrop >= 2.5) pieces.push(S(4, 'both'), F(+bigDrop.toFixed(2)), S(6, 'both'));   // 긴 폭포
         else pieces.push(S(3, 'both'), F(1.2), S(4, 'both'));
@@ -355,7 +371,10 @@ function courseOverlaps(def, checkPond = true) {
       } else if (!jumped && !slid && slideAt > 0 && c >= slideAt && c < n) {
         // 🛝 좌우로 굽이치며 내려감 (좌우 회전 합 0 → 방향은 그대로)
         const s0 = frng() < 0.5 ? 1 : -1;
-        if (n >= 20) {   // 🌀 물 엘리베이터로 3.8 올라가서 → 굽이굽이 → 빙글 한 바퀴 돌며 3.8 내려감 (자기 밑으로 지나감)
+        if (n >= 20 && n % 2 === 1) {   // 🌀⬆ 홀수 레벨: 굽이굽이 내려간 뒤 → 물살에 밀려 빙글 한 바퀴 돌며 4.4 올라감 (자기 위로 지나가서 안 가려짐) → 폭포로 다시 내려옴
+          const d3 = slideD / 3;
+          pieces.push(S(3, 'both'), SL(s0 * 40, 6.5, d3), SL(-s0 * 80, 6.5, d3), SL(s0 * 40, 6.5, d3), S(6, 'both'), SL(s0 * 360, 5.2, -4.4), S(8, 'both'), F(4.4), S(4, 'both'));   // 나선 들어가기 전 평평한 직선 + 4.4 올라감 (위로 돌아 지나가는 곳이 아래 물길과 충분히 떨어지게) → 나선 위를 다 지나간 뒤에 폭포
+        } else if (n >= 20) {   // 🌀 물 엘리베이터로 3.8 올라가서 → 굽이굽이 → 빙글 한 바퀴 돌며 3.8 내려감 (자기 밑으로 지나감)
           const d3 = slideD / 3;
           pieces.push(S(3, 'both'), UP(3.8), S(2, 'both'), SL(s0 * 40, 6.5, d3), SL(-s0 * 80, 6.5, d3), SL(s0 * 40, 6.5, d3), SL(s0 * 360, 5.2, 3.8), S(4, 'both'));
         } else {       // 굽이굽이 6번 (예전의 1.5배 길이)
@@ -364,7 +383,9 @@ function courseOverlaps(def, checkPond = true) {
         }
         slid = true;
       } else if (!jumped && !looped && loopAt > 0 && c >= loopAt && c < n) {
-        pieces.push(S(4, 'both'), LP(width0), S(5, 'both'));   // 물길 폭은 보통 그대로 (관 두 줄이 꽉 채움)
+        if (n % 10 === 8) {   // 🎢⬆ 38·48·58: 물 엘리베이터로 높이 올라간 곳에서 루프 → 폭포로 다시 내려옴 (낮은 곳의 루프는 위 물길에 가려 잘 안 보였음)
+          pieces.push(S(3, 'both'), UP(3.5), S(4, 'both'), LP(width0), S(5, 'both'), F(3.5), S(4, 'both'));
+        } else pieces.push(S(4, 'both'), LP(width0), S(5, 'both'));   // 물길 폭은 보통 그대로 (관 두 줄이 꽉 채움)
         looped = true;
       } else if (!jumped && !cliffed && cliffAt > 0 && c >= cliffAt && c < n) {
         // 높이 여유가 있으면 그만큼 내려가는 절벽, 없으면 절벽 뒤 물 엘리베이터로 다시 올라옴 (호수 위 여유 안에서 낮은~높은 절벽)
@@ -393,7 +414,11 @@ function courseOverlaps(def, checkPond = true) {
       if (c < n && rng() < 0.42 + 0.33 * k) pieces.push({ ...S(len * 1.15, 'none'), plain: true }, S(2, 'both'));   // 난이도↑: 난간 없는 직선 더 자주·더 길게
       else pieces.push({ ...S(len, 'both'), plain: true });
     }
-    pieces.push(S(5, 'both'));
+    if (n === MAX_LEVEL) {   // 🏁 마지막 레벨: 결승선 뒤로 넓은 물길을 혼자 10초쯤 헤엄쳐 가서 새 보금자리에 도착 (epi = 이야기 구간, 조작·장애물 없음)
+      const ew = +(width0 * 1.9).toFixed(2);
+      pieces.push(S(5, 'both'), { t: 'S', len: 12, walls: 'both', w: ew, epi: true }, { t: 'C', angle: 22, radius: 22, walls: 'both', w: ew, epi: true },
+        { t: 'C', angle: -22, radius: 22, walls: 'both', w: ew, epi: true }, { t: 'S', len: 12, walls: 'both', w: ew, epi: true });
+    } else pieces.push(S(5, 'both'));
     if (carted) {   // 🚃 기차 구간만큼 보통 직선들을 고르게 줄여서 레벨 전체 길이는 예전과 같게
       const plain = pieces.filter(q => q.plain), tot = plain.reduce((a, q) => a + q.len, 0);
       const f = Math.max(0.35, 1 - (MC_LEN + 9) / Math.max(1, tot));
@@ -465,12 +490,12 @@ function courseOverlaps(def, checkPond = true) {
   function generate(n) {
     // 안 겹치는 코스가 안 나오면 워터슬라이드 없이 → 그래도 안 되면 멀리뛰기도 없이 같은 시드들로 다시
     for (const opt of [{}, { noSlide: true }, { noSlide: true, noStone: true }, { noSlide: true, noRace: true, noStone: true }, { noSlide: true, noJump: true, noStone: true, noRace: true }])
-      for (let attempt = 0; attempt < 60; attempt++) {
+      for (let attempt = 0; attempt < 100; attempt++) {
         const cand = build(n, seeded(n * 97 + 13 + attempt * 7919), opt);
         if (cand && !courseOverlaps(cand)) return cand;
       }
     console.warn('겹치지 않는 코스를 못 만듦: 레벨', n);
-    for (let attempt = 60; attempt < 400; attempt++) {   // 시드를 더 바꿔 가며 (도착 섬 겹침은 눈감아 줌)
+    for (let attempt = 100; attempt < 400; attempt++) {   // 시드를 더 바꿔 가며 (도착 섬 겹침은 눈감아 줌)
       const cand = build(n, seeded(n * 97 + 13 + attempt * 7919));
       if (cand) return cand;
     }

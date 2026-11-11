@@ -50,7 +50,9 @@ Top-of-file constants hold the tuning values: `WATER_DRAG`, `INPUT_ACC`, `CAM_UP
 - **Physics:** `physicsStep` / `airStep` move the single player state object `P` (`x`, `y`, `z`, `vx`, `vz`, `idx`, `lat`, `prog`, and special-mode fields such as `air`, `loop`, `diveT`, `cliffAir`).
   - Special modes return early from `physicsStep`.
   - Any new mode needs its fields reset in both `Object.assign(P, …)` lists: `resetDuck` and respawn.
-- **Main loop:** `frame()` → `tick(dt)` runs a state machine. States are `title`, `levels`, `countdown`, `playing`, `paused`, `falling`, `respawning`, `win`, `failed`, `wardrobe` and `shop`.
+- **Main loop:** `frame()` → `tick(dt)` runs a state machine. States are `title`, `levels`, `intro`, `countdown`, `playing`, `paused`, `falling`, `respawning`, `outro`, `win`, `failed`, `wardrobe` and `shop`.
+  - `intro` (`playTitleIntro`/`updateIntro`): when level 1 is started from the title or level screen, the family on the title-screen pond swims off to screen right, the hero follows, then the screen fades and `startLevel(0, { skipIntro: true })` runs. Tapping skips it.
+  - `outro` (level 60 only, `startOutro`/`updateOutro`): after the finish arch (`world.epiD`, samples flagged `epi`), the duck auto-swims the wide channel, then `startWin`. The time limit and placements exclude the `epi` stretch.
   - `updateCamera` → `cameraGoal`: the camera keeps a fixed world-space offset and never rotates with the track. It dips low when another track segment blocks the view (`segBlocked`) and frames the loop on loop levels.
 - **Title screen:** reuses level 1's arrival pond (`showTitleScene`), with wandering ducks, a real-time sky (`titleTimeTheme`) and islands.
 - **Persistence:** `save` lives in localStorage under `duckwaterway.v1` and holds unlocked levels, stars/missions, best times per difficulty (`best` = hard, `bestN` = normal), equip, coins, shop and playTime. The title theme override is stored separately under `duckwaterway.titleTheme`.
