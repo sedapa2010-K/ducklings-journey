@@ -364,33 +364,53 @@ const blushMat = new THREE.MeshBasicMaterial({ color: 0xff8fab, transparent: tru
 const irisMat = new THREE.MeshBasicMaterial({ color: 0x6b4a2e });
 const nostrilMat = new THREE.MeshBasicMaterial({ color: 0xb4581c });
 
-// 소용돌이 무늬 (나선)
+// 소용돌이 무늬: 물길과 같은 물빛으로, 가운데만 살짝 깊은 파랑 → 가장자리는 물에 스며들 듯 투명.
+// 팔은 물길 물결 줄무늬처럼 반투명 흰 곡선이고, 안쪽은 굵고 바깥으로 갈수록 가늘고 흐려짐
 const whirlTex = canvasTex(128, 128, (g, w, h) => {
-  const grd = g.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grd.addColorStop(0, 'rgba(40,110,190,0.85)'); grd.addColorStop(0.7, 'rgba(90,170,230,0.55)'); grd.addColorStop(1, 'rgba(160,220,255,0)');
+  const grd = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(40,130,205,0.7)'); grd.addColorStop(0.35, 'rgba(80,170,225,0.45)'); grd.addColorStop(0.75, 'rgba(127,208,245,0.15)'); grd.addColorStop(1, 'rgba(127,208,245,0)');
   g.fillStyle = grd; g.beginPath(); g.arc(64, 64, 64, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineCap = 'round';
-  for (let arm = 0; arm < 3; arm++) {
-    g.lineWidth = 5; g.beginPath();
-    for (let t = 0; t < 1; t += 0.02) {
-      const a = arm * Math.PI * 2 / 3 + t * Math.PI * 3, r = 6 + t * 54;
-      const x = 64 + Math.cos(a) * r, y = 64 + Math.sin(a) * r;
-      t === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  g.lineCap = 'round';
+  for (let arm = 0; arm < 4; arm++) {
+    for (let t = 0; t < 0.98; t += 0.02) {   // 짧은 조각으로 그려서 굵기·진하기가 바깥으로 갈수록 줄어듦
+      const P0 = u => { const a = arm * Math.PI / 2 + u * Math.PI * 2.4, r = 5 + u * 52; return [64 + Math.cos(a) * r, 64 + Math.sin(a) * r]; };
+      const [x0, y0] = P0(t), [x1, y1] = P0(t + 0.025);
+      g.strokeStyle = `rgba(255,255,255,${(0.9 * Math.min(1, t * 6) * Math.pow(1 - t, 0.6)).toFixed(3)})`; g.lineWidth = 2 + (1 - t) * 4;
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
     }
-    g.stroke();
   }
 });
 const whirlMat = new THREE.MeshBasicMaterial({ map: whirlTex, transparent: true, depthWrite: false });
-const fountainTex = canvasTex(64, 128, (g, w, h) => {   // 물기둥 무늬: 세로 물줄기 + 거품 점 (위로 흘러가게 애니메이션)
-  g.fillStyle = 'rgba(200,238,255,0.75)'; g.fillRect(0, 0, w, h);
-  for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(255,255,255,${0.35 + (i % 3) * 0.2})`; g.fillRect((i * 37) % w, 0, 3 + (i % 3) * 2, h); }
-  for (let i = 0; i < 40; i++) { g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc((i * 53) % w, (i * 29) % h, 1.5 + (i % 3), 0, Math.PI * 2); g.fill(); }
+// 분수 물기둥: 물길 물과 같은 하늘색 그라데이션 + 물길처럼 반투명 흰 물결 줄 (위로 흘러가게 애니메이션)
+const fountainTex = canvasTex(64, 128, (g, w, h) => {
+  const grd = g.createLinearGradient(0, 0, w, 0);
+  grd.addColorStop(0, 'rgba(127,208,245,0.8)'); grd.addColorStop(0.5, 'rgba(168,230,255,0.8)'); grd.addColorStop(1, 'rgba(127,208,245,0.8)');
+  g.fillStyle = grd; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 3; g.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const x = 6 + ((i * 23) % 52), y = (i * 41) % h + 20, len = 18 + (i % 3) * 10;
+    g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 3, y - len / 2, x, y - len); g.stroke();
+  }
 });
 fountainTex.wrapS = fountainTex.wrapT = THREE.RepeatWrapping; fountainTex.repeat.set(2, 1.5);
-const fountainMat = new THREE.MeshBasicMaterial({ map: fountainTex, transparent: true, opacity: 0.88, side: THREE.DoubleSide, depthWrite: false });   // 분수 물기둥
-const fountainCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false });
-const fountainBoilMat = new THREE.MeshBasicMaterial({ color: 0xe9f8ff, transparent: true, opacity: 0.95 });
-const fountainTopMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+const fountainMat = new THREE.MeshBasicMaterial({ map: fountainTex, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });   // 분수 물기둥
+const fountainCoreMat = new THREE.MeshBasicMaterial({ color: 0xd4f2ff, transparent: true, opacity: 0.45, depthWrite: false });
+const fountainBoilMat = new THREE.MeshBasicMaterial({ color: 0xc8eeff, transparent: true, opacity: 0.85 });
+const fountainTopMat = new THREE.MeshBasicMaterial({ color: 0xb8e8fc, transparent: true, opacity: 0.85 });
+// 분수 구멍 자리: 테두리 없이, 물속이 깊어 보이는 둥근 그라데이션 + 옅은 물결 고리 두 줄
+const fountainPoolTex = canvasTex(128, 128, (g, w, h) => {
+  const grd = g.createRadialGradient(64, 64, 2, 64, 64, 64);
+  grd.addColorStop(0, 'rgba(30,115,195,0.75)'); grd.addColorStop(0.45, 'rgba(60,150,215,0.5)'); grd.addColorStop(0.8, 'rgba(127,208,245,0.15)'); grd.addColorStop(1, 'rgba(127,208,245,0)');
+  g.fillStyle = grd; g.beginPath(); g.arc(64, 64, 64, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.35)'; g.lineWidth = 2.5;
+  for (const r of [34, 50]) { g.beginPath(); g.arc(64, 64, r, 0, Math.PI * 2); g.stroke(); }
+});
+const fountainPoolMat = new THREE.MeshBasicMaterial({ map: fountainPoolTex, transparent: true, depthWrite: false });
+const fountainRippleGeo = new THREE.RingGeometry(0.9, 1, 32); fountainRippleGeo.userData.keep = true;
+// 🌇🌙 저녁·밤 물길이면 소용돌이·분수도 같은 물빛으로 물들임 (물길 재질 색을 그대로 곱함)
+const WHIRL_FOUNT_MATS = [whirlMat, fountainMat, fountainCoreMat, fountainBoilMat, fountainTopMat, fountainPoolMat];
+WHIRL_FOUNT_MATS.forEach(m => { m.userData.base = m.color.clone(); });
+function tintWaterProps(waterM) { for (const m of WHIRL_FOUNT_MATS) m.color.copy(m.userData.base).multiply(waterM.color); }
 
 // 꽃게 (좌우로 왔다 갔다)
 function makeFrog() {   // 🐸 앞(-z)이 오리 쪽
@@ -1381,6 +1401,7 @@ function buildLevelWorld(def) {
       logCount++;
     }
   }
+  tintWaterProps(waterMatFor(theme, deepWater));   // 소용돌이·분수를 이 레벨 물빛에 맞춤
   for (const i of pickSpots(nWhirls, 24, i => walledAt(i))) {   // 소용돌이: 양쪽 난간 있는 직선에만 (시간 손해용)
     // 한쪽으로 치우치게 놓아서 반대쪽으로 비켜 갈 수 있게 (가운데를 다 막지 않음)
     const sm = samples[i], R = Math.min(1.05, sm.w * 0.6), off = (rng() < 0.5 ? 1 : -1) * (sm.w - R - 0.05);
@@ -1403,8 +1424,12 @@ function buildLevelWorld(def) {
     const x = sm.x + sm.nx * off, z = sm.z + sm.nz * off, g = new THREE.Group(), fy = sm.y + (sm.bank || 0) * off;   // 기울어진 코너면 그 자리 물 높이에
     g.position.set(x, fy, z); group.add(g);
     const FR = 0.6;   // 분수 크기 (구멍 반지름)
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(FR, 0.11, 8, 24), toon(0xbfc8d2)); ring.rotation.x = Math.PI / 2; ring.position.y = 0.05; g.add(ring);
-    const hole = new THREE.Mesh(new THREE.CircleGeometry(FR - 0.07, 24), new THREE.MeshBasicMaterial({ color: 0x2a6fb0 })); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.06; g.add(hole);
+    // 테두리 없이: 물속 깊은 곳처럼 둥근 그라데이션 (예고 때 커졌다 작아졌다) + 바깥으로 퍼지는 물결 고리
+    const ring = new THREE.Mesh(new THREE.CircleGeometry(FR + 0.45, 32), fountainPoolMat); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; g.add(ring);
+    const ripples = [0, 0.5].map(ph => {
+      const m = new THREE.Mesh(fountainRippleGeo, new THREE.MeshBasicMaterial({ color: fountainTopMat.color.clone(), transparent: true, opacity: 0, depthWrite: false }));
+      m.rotation.x = -Math.PI / 2; m.position.y = 0.055; g.add(m); return { m, ph };
+    });
     const boil = [];   // 구멍 안에서 끓듯이 부풀었다 톡 터지는 거품
     for (let k = 0; k < 10; k++) {
       const b = new THREE.Mesh(sphLow, fountainBoilMat); b.position.y = 0.07; g.add(b);
@@ -1414,7 +1439,7 @@ function buildLevelWorld(def) {
     const core = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1, 12, 1, true), fountainCoreMat); core.visible = false; g.add(core);
     const cap = new THREE.Group(); cap.visible = false; g.add(cap);   // 물기둥 꼭대기 물보라 (꿈틀꿈틀)
     for (let k = 0; k < 9; k++) { const b = new THREE.Mesh(sphLow, fountainTopMat); const a = k / 9 * Math.PI * 2, rr = k % 3 === 0 ? 0.12 : 0.42; b.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr); b.userData.base = 0.22 + (k % 3) * 0.05; cap.add(b); }
-    fountains.push({ g, col, core, cap, ring, boil, R: FR, x, z, y: fy, idx: i, H: 2.8, h: 0, phase: 'idle', t: 1.5 + rng() * 3 });
+    fountains.push({ g, col, core, cap, ring, ripples, boil, R: FR, x, z, y: fy, idx: i, H: 2.8, h: 0, phase: 'idle', t: 1.5 + rng() * 3 });
   }
   // 물레방아(레벨 20~): 커다란 나무 바퀴가 물길을 가로질러 돌고, 날개가 물에 잠길 때 지나가면 튕겨 나감
   const nMills = levelNo < 20 || RACE ? 0 : Math.min(4, 1 + Math.floor((levelNo - 20) / 10));   // 20:1, 30:2, 40:3, 50~: 4
@@ -1783,15 +1808,18 @@ function buildLevelWorld(def) {
     const off = (rng() * 2 - 1) * Math.max(0, sm.w - 2.1);
     const x = sm.x + sm.nx * off, z = sm.z + sm.nz * off, tg = new THREE.Group();
     tg.position.set(x, sm.y + 0.06, z); tg.rotation.x = -Math.PI / 2;
-    [[1.75, 1.15, 0xffffff], [1.15, 0.55, 0xff5a5f], [0.55, 0, 0xffd43b]].forEach(([r1, r0, col], k) => {
+    // 바깥부터 파랑 · 빨강 · 노랑 (띠 경계 = 점수 경계 1.2 · 0.6 → 노랑 5 · 빨강 3 · 파랑 1)
+    const TG_BANDS = [[1.75, 1.15, 0x3a8fe8], [1.15, 0.55, 0xff5a5f], [0.55, 0, 0xffd43b]];
+    TG_BANDS.forEach(([r1, r0, col], k) => {
       const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 40), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false }));
       m.position.z = k * 0.004; m.renderOrder = 3 + k; tg.add(m);   // 투명한 물보다 나중에 그려서 잘 보이게
     });
-    // 색 띠마다 바깥 테두리를 진한 선으로 (흰·빨강·노랑 경계가 물 위에서도 또렷하게). 가운데 테두리는 가운데와 함께 콩닥
-    [[1.75, 0], [1.15, 1], [0.55, 2]].forEach(([r, k]) => {
+    const center = tg.children[TG_BANDS.length - 1]; tg.userData.center = center;
+    // 색 띠마다 바깥 테두리를 진한 선으로 (파랑·빨강·노랑 경계가 물 위에서도 또렷하게). 가운데 테두리는 가운데와 함께 콩닥
+    TG_BANDS.forEach(([r], k) => {
       const ln = new THREE.Mesh(new THREE.RingGeometry(r - 0.07, r + 0.02, 48), new THREE.MeshBasicMaterial({ color: 0x5a4632, transparent: true, opacity: 0.95, depthWrite: false }));
       ln.renderOrder = 7;   // 반투명 과녁 띠보다 나중에 그려야 테두리가 위에 보임
-      if (k === 2) { ln.position.z = 0.002; tg.children[2].add(ln); } else { ln.position.z = 0.012; tg.add(ln); }
+      if (k === TG_BANDS.length - 1) { ln.position.z = 0.002; center.add(ln); } else { ln.position.z = 0.012; tg.add(ln); }
     });
     group.add(tg);
     targets.push({ g: tg, x, z, y: sm.y, idx: i, done: false });
@@ -1807,7 +1835,8 @@ function buildLevelWorld(def) {
   }
   // 💧 물 위에 얹는 반투명 무늬(화살표·소용돌이·분수 물기둥)는 물보다 나중에 그림
   // (투명한 물길 덩어리와 거리 순서로 섞여 그려지면 물에 덮여 안 보이던 곳이 있었음)
-  const overWater = new Set([boostMat, boostMatSparse, boostFadeMat, boostSparseFadeMat, whirlMat, fountainMat, fountainCoreMat, fountainBoilMat, fountainTopMat]);
+  const overWater = new Set([boostMat, boostMatSparse, boostFadeMat, boostSparseFadeMat, whirlMat, fountainMat, fountainCoreMat, fountainBoilMat, fountainTopMat, fountainPoolMat]);
+  for (const f of fountains) for (const r of f.ripples) overWater.add(r.m.material);
   group.traverse(o => { if (o.isMesh && overWater.has(o.material)) o.renderOrder = Math.max(o.renderOrder, 2); });
   return { epiD: epiI > 0 ? samples[epiI].d : null, spring, startPond, carts, cliffSplash, gravels, loops, steam, theme, biome: biome.id, lakeStars, group, samples, total, family, homeAt, homeCtx, pondC, pond, arrive, falls, limit, babies, items, shieldWalls, logs, whirls, crabs, mills, lakeY: LAKE_Y, clock, fountains, boosts, frogs, coins, limit0, targets, race, raceK: RACE, racers, gapArcs, rings, waves,
     raceObs: RACE ? [...logs.map(L => ({ idx: L.idx, lo: L.lo, hi: L.hi })), ...whirls.map(w => ({ idx: w.idx, lo: w.lat - w.R, hi: w.lat + w.R }))] : [] };
@@ -3407,7 +3436,7 @@ function scoreLanding() {
   const tg = (world.targets || []).find(q => Math.abs(q.idx - P.idx) < 40);
   if (!tg) return;
   const d = Math.hypot(P.x - tg.x, P.z - tg.z);
-  const c = d < 0.6 ? 5 : d < 1.2 ? 3 : d < 1.8 ? 1 : 0;
+  const c = d < 0.6 ? 5 : d < 1.2 ? 3 : d < 1.8 ? 1 : 0;   // 노랑 5 · 빨강 3 · 파랑 1 (과녁 띠 경계와 같음)
   if (c) {
     save.coins = (save.coins || 0) + c; stats.coins += c; updateCoinsHud(true);
     for (let k = 0; k < c; k++) setTimeout(() => Sfx.coin(), k * 90);
@@ -3909,10 +3938,11 @@ function raceWin(tm) {
     b.onclick = () => { Sfx.click(); b.classList.add('hidden'); showResult(); };
   }, 1500);
 }
-// 🐣 레벨 1 처음 이야기 (첫 화면 연못에서): 가족과 함께 놀다가 → 가족이 화면 오른쪽으로 떠나 버림 → 혼자 남아 두리번
-//    → 주인공도 오른쪽으로 따라감 → 화면이 서서히 밝아지며 레벨 1 시작
-const INTRO = { happy: 2.4, leave: 4.6, look: 6.6 };
+// 🐣 레벨 1 처음 이야기 (첫 화면 연못에서): 주인공은 화면 왼쪽에서 혼자 놀고, 가족은 하트 뿅뿅 → 가족이 화면 오른쪽으로 떠나 버림
+//    → 뒤늦게 알아채고 두리번 → 주인공도 오른쪽으로 따라감 → 화면이 서서히 밝아지며 레벨 1 시작
+const INTRO = { happy: 2.4, leave: 5.4, look: 7.4 };
 let introCamT = 0, introT = 0, introLeavers = [], introSaid = false, introFadeT = -1, introRight = new THREE.Vector3(1, 0, 0);
+let introPlay = null;   // 주인공이 혼자 노는 자리(화면 왼쪽) · 폴짝 타이머
 const fadeEl = document.createElement('div'), storyEl = document.createElement('div');   // 화면 덮개(서서히 밝아짐) · 이야기 말풍선 (처음 쓸 때 화면에 붙임)
 fadeEl.style.cssText = 'position:absolute;inset:0;background:#fffaf0;opacity:0;pointer-events:none;transition:opacity .55s ease;z-index:60';
 storyEl.style.cssText = 'position:absolute;left:50%;bottom:20%;transform:translateX(-50%);max-width:86%;padding:10px 16px;border-radius:16px;background:rgba(255,255,255,.92);color:#5a4632;font-size:16px;text-align:center;opacity:0;pointer-events:none;transition:opacity .35s;z-index:55;box-shadow:0 3px 0 rgba(90,70,50,.15)';
@@ -3926,6 +3956,10 @@ function playTitleIntro() {
   state = 'intro'; introT = 0; introSaid = false; introFadeT = -1; introCamT = elapsed;
   const r = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion); r.y = 0; introRight = r.normalize();   // 화면 오른쪽
   introLeavers = titleWander.filter(w => !w.player).map((w, k) => ({ w, delay: w.mom ? 0 : 0.2 + k * 0.16, off: (k % 3 - 1) * 0.7, gone: false }));
+  {   // 🐤 주인공이 혼자 놀 자리: 연못 가운데에서 화면 왼쪽으로, 살짝 카메라 쪽
+    const c = world.pondC; let cx = camera.position.x - c.x, cz = camera.position.z - c.z; const L = Math.hypot(cx, cz) || 1;
+    introPlay = { x: c.x - introRight.x * 1.0 + cx / L * 1.8, z: c.z - introRight.z * 1.0 + cz / L * 1.8, t: 0, hop: 0, nextHop: 0.9, there: false };
+  }
   storySay(t('introSkip'), 2000);
   setTimeout(() => { if (state === 'intro') Sfx.quack(1.3); }, 300);
 }
@@ -3937,8 +3971,11 @@ function updateIntro(dt) {
     return;
   }
   const c = world.pondC, R = introRight, nx = -R.z, nz = R.x;
-  if (introT < INTRO.happy) {   // 🥰 다 같이 놀며 하트 뿅뿅
+  if (introT < INTRO.leave) introSolo(dt);   // 🐤 주인공: 왼쪽에서 혼자 놀이 (가족이 떠나는 줄도 모름)
+  if (introT < INTRO.happy) {   // 🥰 가족은 저희끼리 하트 뿅뿅
+    const sx = P.x, sz = P.z, sy = P.y, syaw = P.yaw;
     wanderTitleDucks(dt);
+    Object.assign(P, { x: sx, z: sz, y: sy, yaw: syaw });   // 주인공은 introSolo 가 움직임
     for (const L of introLeavers) if (Math.random() < dt * 0.8) { const q = L.w.d.position; spawnSprite(heartTex, q.x, q.y + 0.9 * L.w.d.scale.x + 0.3, q.z, 0, 0.7, 0, 0.3, 0.9); }
     return;
   }
@@ -3954,21 +3991,46 @@ function updateIntro(dt) {
     if (w.d.userData.mark) w.d.userData.mark.visible = false;
     if (Math.hypot(w.x - c.x, w.z - c.z) > 15) { w.d.visible = false; L.gone = true; }
   }
-  // 주인공: 떠나는 가족을 바라보다 → 두리번두리번 → 오른쪽으로 따라감
+  // 주인공: (혼자 놀다가) 뒤늦게 알아채고 두리번두리번 → 오른쪽으로 따라감
+  if (introT < INTRO.leave) return;
   const toR = Math.atan2(-R.x, -R.z);
   let goal;
-  if (introT < INTRO.leave) goal = toR;
-  else if (introT < INTRO.look) {
+  if (introT < INTRO.look) {
     if (!introSaid) { introSaid = true; Sfx.quack(1.6); storySay(t('introLost'), 2400); }
     goal = toR + Math.sin((introT - INTRO.leave) * 3.4) * 1.1 + Math.sin((introT - INTRO.leave) * 1.2) * 1.3;
   } else {
     goal = toR;
     const v = Math.min(3.2, 1.2 + (introT - INTRO.look) * 2.4) * dt;
     P.x += R.x * v; P.z += R.z * v;
-    if (Math.hypot(P.x - c.x, P.z - c.z) > 11 || introT > INTRO.look + 5) introFinish();
+    if ((P.x - c.x) * R.x + (P.z - c.z) * R.z > 6 || introT > INTRO.look + 6) introFinish();   // 화면 오른쪽 밖으로 나가면
   }
   let dy = goal - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); P.yaw += dy * damp(introT > INTRO.leave && introT < INTRO.look ? 9 : 4, dt);
   P.y = c.y;
+}
+function introSolo(dt) {   // 🐤 화면 왼쪽으로 헤엄쳐 가서 → 작은 원을 그리며 뱅글뱅글, 가끔 폴짝 첨벙
+  const S = introPlay, c = world.pondC;
+  let tx = S.x, tz = S.z;
+  if (S.there) {
+    S.t += dt;
+    const a = S.t * 1.7;
+    tx = S.x + Math.cos(a) * 0.42; tz = S.z + Math.sin(a) * 0.42;
+    S.nextHop -= dt;
+    if (S.nextHop <= 0) {
+      S.nextHop = 1.1 + Math.random() * 0.7; S.hop = 0.4;
+      burst(P.x, c.y + 0.05, P.z, 6, 1.0, 0.05, 0.45); spawnRipple(P.x, c.y, P.z, duck.scale.x * 1.4);
+      if (Math.random() < 0.5) Sfx.quack(1.5 + Math.random() * 0.3);
+    }
+  }
+  const dx = tx - P.x, dz = tz - P.z, D = Math.hypot(dx, dz);
+  if (!S.there && D < 0.55) { S.there = true; S.t = Math.atan2(P.z - S.z, P.x - S.x) / 1.7; }
+  const v = Math.min(D, (S.there ? 1.3 : 2.4) * dt);
+  if (D > 1e-4) {
+    P.x += dx / D * v; P.z += dz / D * v;
+    let dy = Math.atan2(-dx, -dz) - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); P.yaw += dy * damp(6, dt);
+  }
+  S.hop = Math.max(0, S.hop - dt);
+  P.y = c.y + (S.hop > 0 ? Math.sin((1 - S.hop / 0.4) * Math.PI) * 0.35 : 0);
+  const me = titleMe(); if (me) { me.x = P.x; me.z = P.z; }   // 가족과 부딪힘 계산용
 }
 function introFinish() {   // 화면이 서서히 밝아짐 → 다 밝아지면 레벨 1 시작 (updateIntro 에서)
   if (state !== 'intro' || introFadeT >= 0) return;
@@ -4829,7 +4891,7 @@ function tick(dt) {
     const goal = on ? 9 : 0; fovBoost += (goal - fovBoost) * damp(on ? 3 : 2, dt);
     const f = baseFov + fovBoost; if (Math.abs(camera.fov - f) > 0.01) { camera.fov = f; camera.updateProjectionMatrix(); }
     if (on && Math.random() < dt * 30) spawnDrop(P.x + (Math.random() - 0.5) * 0.8, P.y + 0.1, P.z + (Math.random() - 0.5) * 0.8, (Math.random() - 0.5) * 2, 1.5 + Math.random(), (Math.random() - 0.5) * 2, 0.07, 0.4);
-    if (world && world.targets) for (const tg of world.targets) tg.g.children[2].scale.setScalar(1 + Math.sin(elapsed * 5) * 0.08);   // 과녁 가운데가 콩닥
+    if (world && world.targets) for (const tg of world.targets) tg.g.userData.center.scale.setScalar(1 + Math.sin(elapsed * 5) * 0.08);   // 과녁 가운데가 콩닥
   }
   if (world) {
     const on = shieldT > 0 && (state === 'playing' || state === 'countdown');
@@ -4874,6 +4936,12 @@ function tick(dt) {
         b.m.scale.set(sz, sz * 0.6, sz); b.m.visible = sz > 0.01;
       }
       f.ring.scale.setScalar(f.phase === 'warn' ? 1 + Math.abs(Math.sin(elapsed * 14)) * 0.12 : 1);
+      const rpSp = f.phase === 'warn' ? 1.6 : f.phase === 'erupt' ? 1.2 : 0.5;   // 물결 고리: 구멍에서 바깥으로 퍼지며 흐려짐 (예고·솟구칠 땐 빠르게)
+      for (const r of f.ripples) {
+        r.ph = (r.ph + dt * rpSp) % 1;
+        r.m.scale.setScalar(f.R * (0.7 + r.ph * 1.3));
+        r.m.material.opacity = Math.sin(r.ph * Math.PI) * (f.phase === 'idle' ? 0.35 : 0.6);
+      }
       if (f.phase === 'warn' && Math.random() < dt * 35) spawnDrop(f.x + (Math.random() - 0.5) * f.R, f.y + 0.1, f.z + (Math.random() - 0.5) * f.R, 0, 1.4 + Math.random(), 0, 0.06, 0.3);   // 보글보글 예고
       else if (f.phase === 'idle' && Math.random() < dt * 4) spawnDrop(f.x + (Math.random() - 0.5) * f.R, f.y + 0.08, f.z + (Math.random() - 0.5) * f.R, 0, 0.6, 0, 0.04, 0.25);   // 평소에도 살짝 보글
       if (f.phase === 'erupt' && f.h > 0.5 && Math.random() < dt * 30) {
@@ -5357,11 +5425,35 @@ function updateEagle(dt) {
 }
 
 let iceberg = null, iceT = 6;
+const iceOutlineMat = new THREE.MeshBasicMaterial({ color: 0x1d4f78, side: THREE.BackSide });
+const iceShadowMat = new THREE.MeshBasicMaterial({ map: blobTex, color: 0x4a6a90, transparent: true, opacity: 0.85, depthWrite: false });
+const ICE_TOP = new THREE.Color(0xf4fcff), ICE_SIDE = new THREE.Color(0x8cc6ec), ICE_LOW = new THREE.Color(0x3a84c2);
+function shadeIce(geo) {   // 면마다 색: 위를 보는 면은 하얗게, 옆은 하늘색, 아래쪽은 짙은 파랑 (면 방향에 살짝 무늬도)
+  const pos = geo.attributes.position, n = pos.count, col = new Float32Array(n * 3), c = new THREE.Color();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3();
+  for (let f = 0; f < n; f += 3) {
+    a.fromBufferAttribute(pos, f); b.fromBufferAttribute(pos, f + 1); d.fromBufferAttribute(pos, f + 2);
+    const ny = b.clone().sub(a).cross(d.clone().sub(a)).normalize().y;
+    if (ny > 0.35) c.copy(ICE_SIDE).lerp(ICE_TOP, Math.min(1, (ny - 0.35) / 0.4));
+    else c.copy(ICE_LOW).lerp(ICE_SIDE, Math.max(0, (ny + 0.6) / 0.95));
+    if ((f / 3) % 2) c.multiplyScalar(0.93);   // 이웃한 면끼리 살짝 다르게 → 각진 얼음 느낌
+    for (let k = 0; k < 3; k++) { col[(f + k) * 3] = c.r; col[(f + k) * 3 + 1] = c.g; col[(f + k) * 3 + 2] = c.b; }
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
 function makeIceberg() {
+  // 🧊 눈 덮인 하얀 물길에서도 잘 보이게: 면마다 밝고 어두운 파랑 음영 + 짙은 파랑 윤곽선 + 물 위 그림자
   const g = new THREE.Group();
-  const ice = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), toon(0xdff6ff)); ice.scale.set(1.1, 0.85, 1); ice.position.y = 0.18; g.add(ice);
-  const top = new THREE.Mesh(new THREE.OctahedronGeometry(0.3, 0), toon(0xf6fdff)); top.position.set(0.1, 0.62, 0.05); top.rotation.set(0.3, 0.5, 0.2); g.add(top);
-  const blue = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 0), toon(0x9fd8f5)); blue.position.set(-0.3, 0.05, -0.15); g.add(blue);
+  const part = (geo, color, pos, scl, rot) => {
+    shadeIce(geo);
+    const m = new THREE.Mesh(geo, toon(color, { flatShading: true, vertexColors: true })); m.position.copy(pos); if (scl) m.scale.copy(scl); if (rot) m.rotation.set(rot[0], rot[1], rot[2]); g.add(m);
+    const o = new THREE.Mesh(geo, iceOutlineMat); o.scale.setScalar(1.12); m.add(o);   // 윤곽선
+    return m;
+  };
+  part(new THREE.IcosahedronGeometry(0.55, 0), 0xffffff, V(0, 0.18, 0), V(1.1, 0.85, 1));
+  part(new THREE.OctahedronGeometry(0.3, 0), 0xffffff, V(0.1, 0.62, 0.05), null, [0.3, 0.5, 0.2]);
+  part(new THREE.IcosahedronGeometry(0.42, 0), 0xffffff, V(-0.3, 0.05, -0.15));
+  const sh = new THREE.Mesh(blobGeo, iceShadowMat); sh.rotation.x = -Math.PI / 2; sh.scale.setScalar(1.9); sh.position.y = 0.03; g.add(sh);   // 물 위 그림자
   return g;
 }
 function updateIcebergs(dt) {

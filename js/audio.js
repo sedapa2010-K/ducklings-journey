@@ -119,22 +119,90 @@ const Sfx = (() => {
     tone(2093, t + 0.26, 0.3, 'sine', 0.15);
   }
 
-  function crow() { // 🐦 까마귀 울음: 까아악! 까아악! (낮고 거칠게 긁는 소리 + 섬뜩한 저음)
-    if (!ctx) return;
-    const t = ctx.currentTime;
-    [0, 0.38, 0.7].forEach((d, i) => {
-      const t0 = t + d, dur = i === 2 ? 0.42 : 0.3, p = i === 2 ? 0.85 : 1;
-      const o = ctx.createOscillator(); o.type = 'sawtooth';
-      o.frequency.setValueAtTime(520 * p, t0); o.frequency.linearRampToValueAtTime(640 * p, t0 + 0.05); o.frequency.exponentialRampToValueAtTime(300 * p, t0 + dur);
-      const lfo = ctx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 70;   // 목이 긁히는 듯한 거친 소리
-      const lg = ctx.createGain(); lg.gain.value = 160; lfo.connect(lg); lg.connect(o.frequency);
-      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 950; f.Q.value = 1.6;
-      const g = ctx.createGain(); env(g, t0, 0.015, 0.3, dur);
-      o.connect(f); f.connect(g); g.connect(sfxBus);
-      o.start(t0); o.stop(t0 + dur + 0.05); lfo.start(t0); lfo.stop(t0 + dur + 0.05);
+  // 🐦 까마귀 울음: "까악! 까악! 까아악~" 진짜 까마귀처럼 목이 쉰 듯 거칠고 코맹맹이 소리
+  //   · 'ㄲ': 울음마다 맨 앞에 아주 짧은 '탁' 하는 숨소리
+  //   · 목소리: 톱니파(기본음) + 반 옥타브 아래 사각파(까마귀 특유의 '갈라지는' 소리, 가운데서 가장 거칠게) + 쉰 목 바람 소리
+  //   · 음 높이와 크기가 불규칙하게 미세하게 떨려서 기계음 같지 않음
+  //   · 입 모양 공명이 '까 → 아 → 악' 으로 움직임 (열렸다가 끝에 닫히며 뚝 끊김)
+  //   · 하늘에서 울리는 듯 아주 짧은 울림(잔향)
+  let crowShaper = null, crowVerb = null;
+  function crowReverb() {   // 짧게 퍼지는 울림: 잡음이 빠르게 사그라드는 충격 응답
+    if (crowVerb) return crowVerb;
+    const len = Math.floor(ctx.sampleRate * 0.7), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) { const x = i / ctx.sampleRate; d[i] = (Math.random() * 2 - 1) * Math.exp(-x * 7) * (x < 0.012 ? x / 0.012 : 1); } }
+    const cv = ctx.createConvolver(); cv.buffer = ir;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3000;   // 울림은 부드럽게
+    const g = ctx.createGain(); g.gain.value = 0.22;
+    cv.connect(lp); lp.connect(g); g.connect(sfxBus);
+    return (crowVerb = cv);
+  }
+  function slowNoise(rate, cutoff, depth, target, t0, end) {   // 천천히 출렁이는 불규칙한 값 → target(오디오 파라미터)에 더함
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.playbackRate.value = rate; s.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff;
+    const g = ctx.createGain(); g.gain.value = depth; s.connect(f); f.connect(g); g.connect(target);
+    s.start(t0, Math.random() * 0.5); s.stop(end);
+  }
+  function crowCaw(t0, dur, p, vol) {
+    const end = t0 + dur + 0.05, f0 = 560 * p;
+    // 음 높이: 짧게 올라갔다가 → 끝으로 갈수록 내려감
+    const pitch = (param, k) => {
+      param.setValueAtTime(f0 * 0.9 * k, t0); param.linearRampToValueAtTime(f0 * 1.08 * k, t0 + 0.04);
+      param.linearRampToValueAtTime(f0 * 1.0 * k, t0 + dur * 0.55); param.exponentialRampToValueAtTime(f0 * 0.72 * k, t0 + dur);
+    };
+    const mix = ctx.createGain(); mix.gain.value = 1;
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; pitch(o.frequency, 1); o.connect(mix);
+    const sub = ctx.createOscillator(); sub.type = 'square'; pitch(sub.frequency, 0.5);
+    const sg = ctx.createGain(); sub.connect(sg); sg.connect(mix);   // 갈라지는 소리: 가운데서 가장 거칠고 끝은 덜 거칠게
+    sg.gain.setValueAtTime(0.12, t0); sg.gain.linearRampToValueAtTime(0.38, t0 + dur * 0.4); sg.gain.linearRampToValueAtTime(0.18, t0 + dur);
+    slowNoise(0.08, 35, f0 * 0.035, o.frequency, t0, end);    // 음 높이 미세 떨림
+    slowNoise(0.08, 35, f0 * 0.0175, sub.frequency, t0, end);
+    const rasp = ctx.createBufferSource(); rasp.buffer = noiseBuf; rasp.loop = true; rasp.playbackRate.value = 0.9 + Math.random() * 0.2;   // 쉰 목 바람
+    const rf = ctx.createBiquadFilter(); rf.type = 'bandpass'; rf.frequency.value = 1600; rf.Q.value = 0.9;
+    const rg = ctx.createGain(); rg.gain.value = 0.5; rasp.connect(rf); rf.connect(rg); rg.connect(mix);
+    if (!crowShaper) { const n = 512, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(x * 2.4); } crowShaper = c; }
+    const ws = ctx.createWaveShaper(); ws.curve = crowShaper; ws.oversample = '2x'; mix.connect(ws);   // 살짝 찌그러뜨려 거칠게
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 450; ws.connect(hp);
+    const outG = ctx.createGain(); outG.gain.value = 1;
+    // 입 모양 공명: 까(조금 닫힘) → 아(활짝) → 악(닫히며 낮아짐)
+    [[1150, 4, 1], [2050, 5, 0.65], [3000, 6, 0.22]].forEach(([fr, q, a], k) => {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q;
+      const F = fr * (0.97 + p * 0.03), close = k === 0 ? 0.68 : 0.82;
+      bp.frequency.setValueAtTime(F * 0.85, t0); bp.frequency.linearRampToValueAtTime(F * 1.04, t0 + 0.06);
+      bp.frequency.setValueAtTime(F, t0 + dur * 0.7); bp.frequency.exponentialRampToValueAtTime(F * close, t0 + dur);
+      const bg = ctx.createGain(); bg.gain.value = a; hp.connect(bp); bp.connect(bg); bg.connect(outG);
     });
-    tone(98, t, 1.1, 'triangle', 0.12); tone(92.5, t + 0.05, 1.1, 'triangle', 0.1);   // 섬뜩하게 어긋난 저음
-    for (let k = 0; k < 3; k++) noise(t + 1.15 + k * 0.16, 0.12, 480, 0.6, 0.16, 'lowpass');   // 퍼덕 퍼덕
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4200; outG.connect(lp);
+    // 크기: 톡 쏘듯 시작 → 유지 → 끝에서 '악' 하고 뚝 끊김. 그 위에 불규칙한 흔들림(곱으로 → 조용할 땐 조용하게)
+    const g = ctx.createGain(), g2 = ctx.createGain(); g2.gain.value = 1; lp.connect(g); g.connect(g2);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+    g.gain.setValueAtTime(vol, t0 + dur * 0.65);
+    g.gain.exponentialRampToValueAtTime(vol * 0.6, t0 + dur * 0.88);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    slowNoise(0.03, 30, 0.5, g2.gain, t0, end);
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;   // 울음마다 살짝 다른 자리에서 들림
+    const out = pan || ctx.createGain(); if (pan) pan.pan.value = (Math.random() - 0.5) * 0.4;
+    g2.connect(out); out.connect(sfxBus); out.connect(crowReverb());
+    // 'ㄲ': 맨 앞 아주 짧은 숨 터지는 소리
+    const k = ctx.createBufferSource(); k.buffer = noiseBuf;
+    const kf = ctx.createBiquadFilter(); kf.type = 'bandpass'; kf.frequency.value = 2600; kf.Q.value = 1.2;
+    const kg = ctx.createGain(); kg.gain.setValueAtTime(0.0001, t0 - 0.012); kg.gain.exponentialRampToValueAtTime(vol * 0.7, t0 - 0.006); kg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.012);
+    k.connect(kf); kf.connect(kg); kg.connect(out); k.start(t0 - 0.012, Math.random() * 0.4); k.stop(t0 + 0.02);
+    [o, sub, rasp].forEach(s => s.start(t0)); [o, sub, rasp].forEach(s => s.stop(end));
+  }
+  function crow() {
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02, j = () => 1 + (Math.random() - 0.5) * 0.06;   // 들을 때마다 조금씩 다르게
+    crowCaw(t, 0.27 * j(), 1.0 * j(), 0.6);
+    crowCaw(t + 0.4 * j(), 0.25 * j(), 1.03 * j(), 0.54);
+    crowCaw(t + 0.8, 0.42, 0.9 * j(), 0.57);   // 마지막은 조금 낮고 길게
+    for (let k = 0; k < 3; k++) {   // 휙 휙: 날갯짓 바람 (부드럽게 부풀었다 사라짐)
+      const t0 = t + 1.3 + k * 0.17, s = ctx.createBufferSource(); s.buffer = noiseBuf;
+      const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.8;
+      f.frequency.setValueAtTime(450, t0); f.frequency.exponentialRampToValueAtTime(900, t0 + 0.06); f.frequency.exponentialRampToValueAtTime(400, t0 + 0.15);   // 휙 하고 스치는 느낌
+      const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.2 - k * 0.04, t0 + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.15);
+      s.connect(f); f.connect(g); g.connect(sfxBus); s.start(t0, Math.random() * 0.4); s.stop(t0 + 0.17);
+    }
   }
 
   function eagle() { // 🦅 독수리 울음: 끼이이야아~ (높게 떨리다 내려감) + 날갯짓 바람
