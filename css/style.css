@@ -289,7 +289,7 @@ h1 {
 /* ---------- 꾸미기 ---------- */
 .levels-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .wardrobe-btn { font-size: 15px; padding: 7px 12px; background: var(--yellow); box-shadow: 0 3px 0 var(--yellow-dark); }
-#wardrobe { align-items: flex-end; }
+#wardrobe { align-items: flex-end; padding-bottom: max(52px, calc(env(safe-area-inset-bottom) + 36px)); }   /* 맨 아래 '레벨 선택' 버튼이 휴대폰 홈 버튼(제스처 바)과 겹치지 않게 위로 */
 #wardrobe .panel.sheet { position: relative; width: 100%; max-height: 58cqh; overflow-y: auto; touch-action: pan-y; padding: 14px 12px 12px; border-radius: 26px 26px 20px 20px; }
 #wardrobe h2 { font-size: 24px; margin: 0 0 4px; }
 .wd-stars { font-size: 17px; }
@@ -297,6 +297,10 @@ h1 {
 .look-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
 .look-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 4px 6px; border-radius: 16px; background: #fff; box-shadow: 0 4px 0 #e8dcc6; }
 .look-btn .look-icon { font-size: 26px; line-height: 1.1; }
+.look-btn .look-icon { position: relative; display: flex; align-items: center; justify-content: center; min-height: 40px; }
+.look-btn .look-img { width: 50px; height: 50px; object-fit: contain; display: block; border-radius: 50%; background: radial-gradient(circle, #d6ecff 0, #e9f5ff 62%, rgba(233,245,255,0) 71%); }
+.look-btn .look-img.dim { filter: grayscale(.6); opacity: .7; }
+.look-btn .look-lock { position: absolute; right: -6px; bottom: -2px; font-size: 14px; }
 .look-btn .look-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .look-btn .look-sub { font-size: 11px; opacity: .7; min-height: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .look-btn.on { background: #fff4c2; box-shadow: 0 4px 0 var(--yellow-dark); outline: 3px solid var(--yellow); }
