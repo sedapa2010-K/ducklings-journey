@@ -112,7 +112,8 @@ const patchMat = new THREE.ShaderMaterial({
   vertexShader: 'attribute float fade; varying float vF; varying vec2 vW; void main(){ vF = fade; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     uniform vec3 col; uniform float time; varying float vF; varying vec2 vW;
-    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    // sin 을 쓰는 해시는 좌표가 커지면(원점에서 먼 코스) 정밀도가 떨어져 줄무늬가 생김 → sin 없는 해시 + 좌표를 작게 접음
+    float h(vec2 p){ p = mod(p, 289.0); vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
     float vn(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
       return mix(mix(h(i), h(i + vec2(1.0, 0.0)), u.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), u.x), u.y); }
     void main(){
@@ -1467,12 +1468,31 @@ function buildLevelWorld(def) {
     }
     return false;
   };
+  // 🪵 낮은(반쯤 잠긴) 통나무 하나 놓기: 물길을 가로질러 낮게 누워 있음. off = 가운데에서 옆으로, W = 길이
+  const bumpLogs = [];
+  const addBumpLog = (i, off, W, phase) => {
+    const sm = samples[i], r = 0.16, bk = sm.bank || 0;
+    const g = new THREE.Group();
+    g.position.set(sm.x + sm.nx * off, sm.y + bk * off + 0.04, sm.z + sm.nz * off);
+    g.rotation.order = 'YXZ'; g.rotation.set(0, Math.atan2(-sm.tx, -sm.tz), Math.atan(-bk));   // 로컬 x = 물길 가로
+    const log = addOutlined(g, new THREE.CylinderGeometry(1, 1, 1, 12), toon(0x9b6a3c), V(0, 0, 0), V(r, W, r), true, 0.035);
+    log.rotation.z = Math.PI / 2;
+    for (const e of [-1, 1]) { const cap = new THREE.Mesh(new THREE.CircleGeometry(r * 0.9, 12), toon(0xe8c38e, { side: THREE.DoubleSide })); cap.position.x = e * (W / 2 + 0.003); cap.rotation.y = Math.PI / 2; g.add(cap); }
+    for (let k = 0; k < 2; k++) { const leaf = new THREE.Mesh(sphLow, toon(0x7fd17a)); leaf.scale.set(0.13, 0.04, 0.08); leaf.position.set((k ? 0.35 : -0.5) * W * 0.5, r * 0.95, 0); g.add(leaf); }   // 작은 풀잎
+    group.add(g);
+    bumpLogs.push({ g, idx: i, d: sm.d, y: sm.y, lo: off - W / 2, hi: off + W / 2, hit: false, phase });
+  };
   let logCount = 0;
   for (const i of pickSpots(nLogs, 20, logRun, () => true)) {
     let [cnt, side] = logPlan.get(i);
     for (let j = 0; j < cnt; j++, side = -side) {
       const li = i + j * LOG_GAP, sm = samples[li];
       if (j) busy.push(li);
+      if (j && !RACE) {   // 연속 통나무의 두 번째·세 번째는 반쯤 잠긴 낮은 통나무 (막지 않고 넘어감). 같은 쪽에 놓음
+        const W = Math.max(0.8, sm.w * 2 / 3);
+        addBumpLog(li, side * (sm.w - W / 2 - 0.12), W, rng() * 6);   // rng 를 예전처럼 한 번 써서 뒤 배치가 바뀌지 않게
+        continue;
+      }
       const a = side * sm.w, full = side * sm.w * 0.08, b = a + (full - a) * (j === 1 || RACE ? 0.7 : 0.8) * 0.8;   // 첫 통나무는 80%, 연속 통나무의 두 번째·레이스 통나무는 70% 길이 → 모두 다시 80%로 줄임 (64% / 56%)
       const lr = RACE ? 0.21 : 0.3;   // 통나무 굵기 (레이스는 70%)
       const L = Math.abs(a - b), mid = (a + b) / 2;
@@ -1740,11 +1760,11 @@ function buildLevelWorld(def) {
     const g = makeFrog(); g.scale.setScalar(1.4); g.position.set(x, fy + 0.09, z); g.rotation.y = Math.atan2(sm.tx, sm.tz); group.add(g);
     frogs.push({ g, pad, x, y: fy + 0.09, z, idx: i, s: sm, sg, state: 'sit', vx: 0, vy: 0, vz: 0, phase: rng() * 6 });
   }
-  // 🪵 낮은 통나무(레벨 3~, 1~3개): 물길을 가로질러 물에 잠기듯 낮게 누워 있음. 막지 않고, 지나가면 엉덩방아 쿵 + 조금 느려짐
+  // 🪵 낮은 통나무(레벨 3~): 물길을 가로질러 물에 잠기듯 낮게 누워 있음. 막지 않고, 지나가면 엉덩방아 쿵 + 조금 느려짐
   //    다른 배치를 바꾸지 않게 따로 rng 를 쓰고, 다른 장애물을 다 놓은 뒤에 자리를 고름
-  const bumpLogs = [];
+  //    개수: 레벨 3~ 3~5개, 레벨이 오를수록 조금씩 더 (최대 8개)
   if (!RACE && levelNo >= 3) {
-    const brng = mulberry(levelNo * 97 + 13), nBump = 1 + Math.floor(brng() * 3);
+    const brng = mulberry(levelNo * 97 + 13), nBump = Math.min(8, 3 + Math.floor(brng() * 3) + Math.floor(levelNo / 20));
     const bumpOk = (i, sp) => {
       for (let k = i - 12; k <= i + 12; k++) { const q = samples[k]; if (!q || q.fall || q.ramp || q.gap || q.fork || q.lift || q.land || q.slide || q.stone || q.pool || q.loopZone || q.island || q.jet || q.rail || q.epi || q.race) return false; }
       return !nearCliff(i) && [...logs, ...whirls, ...crabs, ...mills, ...fountains, ...boosts, ...frogs, ...bumpLogs].every(o => Math.abs(o.idx - i) > sp) && gravels.every(gv => i < gv.i0 - sp || i > gv.i1 + sp);
@@ -1753,17 +1773,9 @@ function buildLevelWorld(def) {
     if (spots.length < nBump) spots.push(...pickSpots(nBump - spots.length, 14, i => bumpOk(i, 8), i => { const a = samples[i - 4], b = samples[i + 4]; return !!a && !!b && a.tx * b.tx + a.tz * b.tz > 0.9; }));   // 자리가 모자라면 조건을 조금 풀어서 한 번 더
     for (const i of spots) {
       // 길이는 물길 폭의 약 1/3 (다른 통나무처럼) → 왼쪽·가운데·오른쪽 중 한 곳에. 옆으로 비켜 가면 안 넘어도 됨
-      const sm = samples[i], W = Math.max(0.8, sm.w * 2 / 3), r = 0.16, bk = sm.bank || 0;
+      const sm = samples[i], W = Math.max(0.8, sm.w * 2 / 3);
       const off = [-1, 0, 1][Math.floor(brng() * 3)] * (sm.w - W / 2 - 0.12);
-      const g = new THREE.Group();
-      g.position.set(sm.x + sm.nx * off, sm.y + bk * off + 0.04, sm.z + sm.nz * off);
-      g.rotation.order = 'YXZ'; g.rotation.set(0, Math.atan2(-sm.tx, -sm.tz), Math.atan(-bk));   // 로컬 x = 물길 가로
-      const log = addOutlined(g, new THREE.CylinderGeometry(1, 1, 1, 12), toon(0x9b6a3c), V(0, 0, 0), V(r, W, r), true, 0.035);
-      log.rotation.z = Math.PI / 2;
-      for (const e of [-1, 1]) { const cap = new THREE.Mesh(new THREE.CircleGeometry(r * 0.9, 12), toon(0xe8c38e, { side: THREE.DoubleSide })); cap.position.x = e * (W / 2 + 0.003); cap.rotation.y = Math.PI / 2; g.add(cap); }
-      for (let k = 0; k < 2; k++) { const leaf = new THREE.Mesh(sphLow, toon(0x7fd17a)); leaf.scale.set(0.13, 0.04, 0.08); leaf.position.set((k ? 0.35 : -0.5) * W * 0.5, r * 0.95, 0); g.add(leaf); }   // 작은 풀잎
-      group.add(g);
-      bumpLogs.push({ g, idx: i, d: sm.d, y: sm.y, lo: off - W / 2, hi: off + W / 2, hit: false, phase: brng() * 6 });
+      addBumpLog(i, off, W, brng() * 6);
     }
   }
   limit += Math.ceil((race ? 3 : 0) + forkExtra + nFount * 2.5 + logCount * 1.2 + nWhirls * 3 + nCrabs * 2 + nMills * 2.5 + gravels.length * 1 + bumpLogs.length * 0.6);   // 장애물 때문에 늦어지는 만큼 더
