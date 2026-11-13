@@ -478,8 +478,68 @@ function courseOverlaps(def, checkPond = true) {
     return { race: k, rivals: k, no: 10 * k - 1, theme: 'day', lakeY: +(-drop - 2.5).toFixed(2),
       flow: +(3.5 + 0.12 * k).toFixed(2), width: +(4.4 + 0.25 * k).toFixed(2), cross: 0, pieces };
   }
+  // 🛝🪙 코인 슬라이드 레이스 (레이스 2·4·6 용. 지금은 시제품으로 레이스 2만): 높은 곳 출발선 → 길고 가파른 워터슬라이드를 쭉 타고 내려감
+  // 순위는 도착 순서가 아니라 모은 코인 수. 크게 굽이치는 S자만 (진행 방향 ±90° 안이라 길이 겹치지 않음)
+  const SLIDE_RACES = [2, 4];
+  function buildSlideRace(k, rng) {
+    const SLOPE = 0.45, LEN = 360 + 30 * k;
+    // 🦘 내리막 점프대: 가속 경사로로 솟았다가 → 끊어진 곳을 날아 gdrop 만큼 아래 물길에 착지
+    // 🎢 롤러코스터: 물길이 언덕 hills 개를 오르락내리락 (꼭대기를 빠르게 넘으면 붕 뜸). 전체로는 조금씩 내려감
+    const CO = (hills, amp) => { const len = hills * 13; return { t: 'S', len, walls: 'both', slide: true, hills, amp, drop: +(len * SLOPE * 0.5).toFixed(2) }; };
+    const JD = () => ({ t: 'J', len: 7.6, ramp: 2.6, gap: 5.0, h: 1.0, walls: 'both', jet: true, gdrop: 3.0, drop: 3.0 });
+    const SS = len => ({ t: 'S', len: +len.toFixed(2), walls: 'both', slide: true, drop: +(len * SLOPE).toFixed(2) });
+    const SC = (ang, R) => SL(ang, R, Math.abs(ang) * Math.PI / 180 * R * SLOPE);
+    const pieces = [S(12, 'both'), SS(10)];
+    let heading = 0, len = 10, turns = 0;
+    while (len < LEN) {
+      const sg = heading > 20 ? -1 : heading < -20 ? 1 : rng() < 0.5 ? 1 : -1;
+      const ang = Math.round(30 + rng() * 35), R = +(15 + rng() * 9).toFixed(1), run = 6 + rng() * 12;
+      pieces.push(SC(sg * ang, R), SS(run));
+      heading += sg * ang; len += ang * Math.PI / 180 * R + run;
+      turns++;
+      if (k >= 4 && turns === 5) {   // 🎢 레이스 4~: 승강장 → 오리 수만큼 칸이 이어진 롤러코스터를 다 같이 타고 → 다시 슬라이드로 풍덩
+        const sh = MC_SHAPES[1], net = sh.reduce((a, q) => a + q[1], 0), s2 = heading > 0 ? -1 : 1;
+        pieces.push(S(4, 'both'), ...MC(sh, s2 * Math.sign(net)).map(p => ({ ...p, fun: true, walls: 'both' })), S(5, 'both'), SS(6));   // fun: 놀이동산 롤러코스터 (레일 하나 · 체인 오르막 → 큰 낙하 → 연속 언덕)
+        heading += s2 * Math.abs(net); len += MC_LEN + 15;
+      } else if (turns === 3 || turns === 8) { pieces.push(SS(4), CO(3, 2.4), SS(6)); len += 49; }   // 🎢 롤러코스터 구간 둘
+      else if (turns % 2 === 0 && len < LEN - 30) { pieces.push(JD(), SS(8)); len += 15.6; }   // 굽이 둘마다 점프대 하나
+    }
+    pieces.push(S(10, 'both'));
+    const drop = pieces.reduce((a, p) => a + (p.drop || 0), 0);
+    return { race: k, rivals: k, coinRace: true, no: 10 * k - 1, theme: 'day', lakeY: +(-drop - 2.5).toFixed(2),
+      flow: 3.6, width: 6.4, cross: 0, pieces };
+  }
+  // 🏄🦅 파도타기 + 독수리 추격 레이스 (레이스 6 피날레): 넓고 완만하게 굽이치는 긴 물길. 뒤에서 큰 파도가 밀려오고, 거대 독수리가 꼴찌 오리를 잡아감
+  const WAVE_RACES = [6];
+  function buildWaveRace(k, rng) {   // 레이스 4처럼 가파른 내리막 워터슬라이드 (넓게)
+    const SLOPE = 0.45, LEN = 470;
+    const SS = len => ({ t: 'S', len: +len.toFixed(2), walls: 'both', slide: true, drop: +(len * SLOPE).toFixed(2) });
+    const SC = (ang, R) => SL(ang, R, Math.abs(ang) * Math.PI / 180 * R * SLOPE);
+    // 🦘 내리막 점프대 (레이스 4와 같은 모양): 굽이마다 거의 하나씩 → 쌩쌩 날아다니는 다이나믹한 코스
+    const JD = () => ({ t: 'J', len: 7.6, ramp: 2.6, gap: 5.0, h: 1.0, walls: 'both', jet: true, gdrop: 3.0, drop: 3.0 });
+    const pieces = [S(14, 'both'), SS(10)];
+    let heading = 0, len = 24, turns = 0;
+    while (len < LEN) {
+      const sg = heading > 25 ? -1 : heading < -25 ? 1 : rng() < 0.5 ? 1 : -1;
+      const ang = Math.round(22 + rng() * 26), R = +(20 + rng() * 10).toFixed(1), run = 8 + rng() * 12;
+      pieces.push(SC(sg * ang, R), SS(run));
+      heading += sg * ang; len += ang * Math.PI / 180 * R + run;
+      if (++turns % 3 !== 0 && len < LEN - 30) { pieces.push(JD(), SS(8)); len += 15.6; }   // 굽이 셋 중 둘마다 점프대
+    }
+    pieces.push(S(10, 'both'));
+    const drop = pieces.reduce((a, p) => a + (p.drop || 0), 0);
+    return { race: k, rivals: k, waveRace: true, no: 10 * k - 1, theme: 'day', lakeY: +(-drop - 2.5).toFixed(2), flow: 3.4, width: 7.6, cross: 0, pieces };
+  }
   const RACE_BASE = 100, RACE_N = 6, raceCache = {};
   function genRace(k) {
+    if (WAVE_RACES.includes(k)) for (let attempt = 0; attempt < 40; attempt++) {
+      const cand = buildWaveRace(k, seeded(k * 5003 + 11 + attempt * 104729));
+      if (!courseOverlaps(cand)) return cand;
+    }
+    if (SLIDE_RACES.includes(k)) for (let attempt = 0; attempt < 40; attempt++) {
+      const cand = buildSlideRace(k, seeded(k * 3011 + 7 + attempt * 104729));
+      if (!courseOverlaps(cand)) return cand;
+    }
     for (let attempt = 0; attempt < 80; attempt++) {
       const cand = buildRace(k, seeded(k * 7717 + 29 + attempt * 104729));
       if (cand && !courseOverlaps(cand)) return cand;

@@ -363,8 +363,8 @@ h1 {
 .shop-coins { white-space: nowrap; }
 
 /* 레이스 버튼: 한 줄로 낮게 (🏁 레이스 5  ★★☆ 최고 2등) */
-.race-row { gap: 4px; }
-.race-btn { flex-direction: row; flex-wrap: nowrap; justify-content: center; gap: 4px; padding: 4px 2px; min-width: 0; white-space: nowrap; letter-spacing: -0.4px; }
-.race-btn .rn { font-size: 12px; flex-shrink: 0; }
+.race-row { gap: 6px; margin: 8px 0 14px; }   /* 일반 레벨 칸 아래 (아래 꾸미기·상점 버튼과 띄움) */
+.race-btn { flex-direction: row; flex-wrap: nowrap; justify-content: center; gap: 4px; padding: 11px 2px; min-width: 0; white-space: nowrap; letter-spacing: -0.4px; }   /* 조금 두툼하게 */
+.race-btn .rn { font-size: 13px; flex-shrink: 0; }
 .race-btn .rs { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; font-size: 10px; flex-shrink: 0; }
 .race-btn .rs .stars.small { font-size: 10px; gap: 0; padding: 0; margin: 0; background: none; box-shadow: none; }

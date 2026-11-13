@@ -79,13 +79,13 @@ EOF
 done
 MAN="$APP/android/app/src/main/AndroidManifest.xml"
 grep -q 'screenOrientation' "$MAN" || sed -i 's|            android:launchMode="singleTask"|            android:launchMode="singleTask"\n            android:screenOrientation="portrait"|' "$MAN"
-# 🇰🇷 한국어 폰에서는 홈 화면 앱 이름을 '오리가족찾기'로
+# 🇰🇷 한국어 폰에서는 홈 화면 앱 이름을 '오리의모험'으로
 mkdir -p "$RES/values-ko"
 cat > "$RES/values-ko/strings.xml" <<'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">오리가족찾기</string>
-    <string name="title_activity_main">오리가족찾기</string>
+    <string name="app_name">오리의모험</string>
+    <string name="title_activity_main">오리의모험</string>
 </resources>
 EOF
 # 📱 게임 중 화면 꺼짐 방지: 작은 네이티브 플러그인 (JS 에서 Capacitor.Plugins.KeepAwake.set({ on }))

@@ -237,6 +237,30 @@ const Sfx = (() => {
     noise(t + 0.06, 0.03, 3200, 4, 0.08);
   }
 
+  function lurk() { // 🫧 물속 천적이 다가올 때: 낮게 웅~ 하는 물속 울림 + 보글보글
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(70, t); o.frequency.linearRampToValueAtTime(52, t + 1.1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.32, t + 0.25); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    o.connect(g); g.connect(sfxBus); o.start(t); o.stop(t + 1.25);
+    for (let k = 0; k < 6; k++) {   // 보글
+      const t0 = t + 0.1 + k * 0.14 + Math.random() * 0.05, b = ctx.createOscillator(); b.type = 'sine';
+      const f0 = 380 + Math.random() * 260; b.frequency.setValueAtTime(f0, t0); b.frequency.exponentialRampToValueAtTime(f0 * 2.2, t0 + 0.06);
+      const bg = ctx.createGain(); env(bg, t0, 0.005, 0.07, 0.06); b.connect(bg); bg.connect(sfxBus); b.start(t0); b.stop(t0 + 0.09);
+    }
+  }
+  function chomp() { // 🐊 튀어올라 덥석: 촤악(물) + 딱!(턱) + 쿵
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    noise(t, 0.28, 1400, 0.7, 0.35);                 // 물을 박차고 튀어오르는 촤악
+    const c = ctx.createOscillator(); c.type = 'square';   // 턱이 딱! 닫힘
+    c.frequency.setValueAtTime(900, t + 0.2); c.frequency.exponentialRampToValueAtTime(180, t + 0.26);
+    const cg = ctx.createGain(); env(cg, t + 0.2, 0.002, 0.22, 0.06);
+    const cf = ctx.createBiquadFilter(); cf.type = 'bandpass'; cf.frequency.value = 1200; cf.Q.value = 1.5;
+    c.connect(cf); cf.connect(cg); cg.connect(sfxBus); c.start(t + 0.2); c.stop(t + 0.3);
+    tone(95, t + 0.21, 0.18, 'sine', 0.3);           // 쿵
+  }
   function swoop() { // 🦅 덮칠 때: 휘익 + 퍽
     if (!ctx) return;
     const t = ctx.currentTime;
@@ -532,6 +556,6 @@ const Sfx = (() => {
   function suspend() { if (ctx && ctx.state === 'running') ctx.suspend(); }
   function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
 
-  return { init, setSong, quack, splash, bump, duckBump, eagle, crow, swoop, gravel, clack, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
+  return { init, setSong, quack, splash, bump, duckBump, eagle, crow, swoop, lurk, chomp, gravel, clack, plop, win, fail, power, heal, coin, whoosh, click, beep, bgmStart, bgmStop,
            setMuted, isMuted: () => muted, setMusic, isMusicOn: () => musicOn, suspend, resume };
 })();
