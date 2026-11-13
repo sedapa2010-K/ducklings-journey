@@ -686,7 +686,7 @@ function sampleTrack(def) {
   const push = (p, slope = 0, flags = {}) => {
     const fx = -Math.sin(th), fz = -Math.cos(th);
     out.push({ x, y, z, tx: fx, tz: fz, nx: fz, nz: -fx, d, slope,   // n = 진행 방향의 왼쪽
-      fall: p.t === 'F' || !!flags.fall, lip: !!flags.lip, lift: !!flags.lift, vlift: !!flags.vlift, rail: !!flags.rail, rlane: flags.rlane || 0, rlaneW: flags.rlaneW || 0, ramp: !!flags.ramp, gap: !!flags.gap || !!p.hopGap, jet: !!flags.jet, big: !!flags.big, loopIn: !!flags.loopIn, loopZone: !!p.loop, cliff: !!flags.cliff, pool: !!flags.pool, land: !!p.land, slide: !!p.slide, stone: !!p.stone, so: p.stone ? p.so : 0, hop: !!p.hopGap, race: !!p.race, epi: !!p.epi, coaster: !!p.hills, crest: !!flags.crest, chain: !!flags.chain, dock: !!flags.dock, dockOff: flags.dockOff || 0,
+      fall: p.t === 'F' || !!flags.fall, lip: !!flags.lip, lift: !!flags.lift, vlift: !!flags.vlift, rail: !!flags.rail, rlane: flags.rlane || 0, rlaneW: flags.rlaneW || 0, ramp: !!flags.ramp, gap: !!flags.gap || !!p.hopGap, jet: !!flags.jet, big: !!flags.big, loopIn: !!flags.loopIn, lf: flags.lf || 0, lfv: flags.lfv || 0, loopZone: !!p.loop, cliff: !!flags.cliff, pool: !!flags.pool, land: !!p.land, slide: !!p.slide, stone: !!p.stone, so: p.stone ? p.so : 0, hop: !!p.hopGap, race: !!p.race, epi: !!p.epi, coaster: !!p.hills, crest: !!flags.crest, chain: !!flags.chain, dock: !!flags.dock, dockOff: flags.dockOff || 0,
       fork: !!p.fork, fside: p.fork ? p.fside : 0, fv: p.fork ? p.fv || 'classic' : '', ih: (flags.ih || 0) * WM, ic: (flags.ic || 0) * WM, fast: !!flags.fast,   // 🔀 갈림길: 가운데 섬 반폭(ih), 빠른 쪽(fside)
       w: (p.w || def.width) / 2 * WM,
       wl: p.walls === 'both' || p.walls === 'L',
@@ -777,8 +777,11 @@ function sampleTrack(def) {
         continue;
       }
       if (p.loop) {   // 🎢 루프 직선: 앞 45%는 가속 물살, 55% 지점에서 루프 관으로 들어감
-        const dd = (i + 1) * ds;
-        push(p, 0, { jet: dd < len * 0.45, loopIn: dd >= len * 0.55 && dd - ds < len * 0.55 });
+        const dd = (i + 1) * ds, lin = len * 0.55, s01 = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+        // 깔때기: 입구 앞에서 왼쪽(출구 줄) 절반이 서서히 막혀 물길이 입구 관 폭으로 좁아짐 → 오리가 자연스럽게 입구로 들어감
+        //   lf = 좁아진 정도(0~1), lfv = 깔때기 둑 높이(1 → 끝에서 물속으로 비스듬히 사라짐. 내려오는 출구 관과 겹치지 않게 입구 2.2 앞에서 끝남)
+        const lf = dd < lin ? s01((dd - 1.0) / 4.5) : 0, lfv = dd < lin ? s01((lin - 2.2 - dd) / 0.8) * lf : 0;
+        push(p, 0, { jet: dd < len * 0.45, loopIn: dd >= lin && dd - ds < lin, lf, lfv });
         continue;
       }
       if (p.fork) {   // 섬은 앞뒤 끝이 뾰족하게 (물길이 넓어진 뒤에 시작)
@@ -805,9 +808,9 @@ function ribbon(samples, i0, i1, offA, yA, offB, yB, mat, vScale) {
   const pos = [], uv = [], idx = [];
   for (let i = i0; i <= i1; i++) {
     const s = samples[i];
-    const a = offA(s), b = offB(s);
+    const a = offA(s), b = offB(s), ya = typeof yA === 'function' ? yA(s) : yA, yb = typeof yB === 'function' ? yB(s) : yB;   // 높이도 샘플마다 다르게 줄 수 있음
     const bk = s.bank || 0;   // 🛣️ 기울어진 코너: 옆으로 갈수록 높이가 달라짐
-    pos.push(s.x + s.nx * a, s.y + yA + bk * a, s.z + s.nz * a, s.x + s.nx * b, s.y + yB + bk * b, s.z + s.nz * b);
+    pos.push(s.x + s.nx * a, s.y + ya + bk * a, s.z + s.nz * a, s.x + s.nx * b, s.y + yb + bk * b, s.z + s.nz * b);
     const v = vScale ? s.d / vScale : 0;
     uv.push(0, v, 1, v);
     if (i < i1) { const k = (i - i0) * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
@@ -825,6 +828,12 @@ function flatUp(mesh) {
   const nm = mesh.geometry.attributes.normal;
   for (let i = 0; i < nm.count; i++) nm.setXYZ(i, 0, 1, 0);
   nm.needsUpdate = true; return mesh;
+}
+
+// 🎢 루프 입구 깔때기: 물길 왼쪽(+lat)이 막히는 안쪽 경계. lf=1 이면 입구 관(오른쪽 절반)의 왼쪽 벽 자리
+function funnelEdge(s) {
+  const tubeEdge = -0.5 * s.w + Math.min(0.85, 0.5 * s.w - 0.04) + 0.06;
+  return s.w - s.lf * (s.w - tubeEdge);
 }
 
 // 플래그가 켜진 연속 구간 [시작, 끝] 목록
@@ -1046,6 +1055,12 @@ function buildLevelWorld(def) {
     }
   }
 
+  // 🎢 루프 입구 깔때기 둑: 난간과 같은 나무로, 물길 왼쪽에서 비스듬히 튀어나와 입구 관 폭까지 좁힘
+  for (const [a, b] of runs(samples, 'lfv')) {
+    const top = s => -0.05 + (WALL_H + 0.05) * Math.min(1, s.lfv * 1.6);
+    add(ribbon(samples, a, b, s => funnelEdge(s), top, s => s.w, top, woodMat()));   // 윗면
+    add(ribbon(samples, a, b, s => funnelEdge(s), -0.05, s => funnelEdge(s), top, woodMat()));   // 물 쪽 옆면
+  }
   // 🎢 세로 루프: 들어가는 줄(왼쪽)에서 위로 한 바퀴 돌아 옆 줄(오른쪽)로 내려오는 초록 관 + 물
   const loops = [];
   samples.forEach((s, i) => {
@@ -4064,6 +4079,15 @@ function physicsStep(dt) {
       startFall(); return;
     }
   }
+  // 🎢 루프 입구 깔때기: 왼쪽이 좁아지는 만큼 벽처럼 밀어 줌 (루프에서 막 내려온 직후엔 출구 줄이라 빼고)
+  if (s.lf > 0.01 && !(P.loopCool > 0)) {
+    const edge = funnelEdge(s) - DUCK_R, over = lat - edge;
+    if (over > 0) {
+      P.x -= s.nx * over; P.z -= s.nz * over; lat = edge;
+      const vn = P.vx * s.nx + P.vz * s.nz;
+      if (vn > 0) { P.vx -= s.nx * vn; P.vz -= s.nz * vn; }   // 튕기지 않고 둑을 따라 미끄러지듯
+    }
+  }
   // 🔀 갈림길 가운데 섬: 섬에 들어서기 전에 있던 쪽 길로만 다님 (섬에 부딪히면 튕김)
   if (s.ih > 0.02) {
     const sg = P.forkSide || (lat >= 0 ? 1 : -1), lim2 = s.ih + DUCK_R, over = lim2 - (lat - s.ic) * sg;
@@ -6251,7 +6275,7 @@ function updatePerch(e, dt) {   // 🪵 기둥 위: 앉아 있기 → 쳐다보�
   } else if (e.phase === 'look' && ahead > 12) e.phase = 'perch';   // 오리가 뒤로 떨어져 다시 출발하면 다시 가만히 앉아 있음
   if (e.phase === 'look') {
     e.t += dt;
-    if (ahead < -4 && P.prog / world.total < 0.82 && chaseOk()) { e.phase = 'takeoff'; e.t = 0; Sfx.whoosh(); }
+    if (ahead < -4 && P.prog / world.total < 0.82 && chaseOk() && !lurkBusy()) { e.phase = 'takeoff'; e.t = 0; Sfx.whoosh(); }   // 물속 천적이 쫓는 중이면 기다림
   }
   let pitchGoal = PERCH_PITCH, yawGoal = Math.atan2(e.side * ps.nx, e.side * ps.nz);
   if (e.phase === 'perch') {   // 기둥 위에 가만히 앉아 물길 쪽을 보며 살짝살짝 고개를 끄덕임
@@ -6283,7 +6307,7 @@ function updateEagle(dt) {
   e.flap += dt;
   if (e.phase === 'perch' || e.phase === 'look' || e.phase === 'takeoff') { g.updateMatrixWorld(true); updatePerch(e, dt); if (e.phase !== 'chase') return; }
   if (e.phase === 'wait') {
-    if (P.prog / world.total < e.at || !chaseOk()) return;
+    if (P.prog / world.total < e.at || !chaseOk() || lurkBusy()) return;   // 하늘·물속 천적은 동시에 안 나옴
     if (P.prog / world.total > 0.82) { e.phase = 'done'; return; }
     e.dist = EAGLE_START;
     const b = eagleBehind(e.dist); g.position.set(b.x, b.s.y + 7, b.z); g.visible = true; sh.visible = true;
@@ -6450,15 +6474,31 @@ function resetLurker() {   // 판 시작마다: 이번 판에 나올지, 어떤 
   let kinds = Object.keys(LURK).filter(k => n >= LURK[k].from);
   if (world.biome === 'snow') kinds = kinds.filter(k => k === 'catfish');   // ❄️ 눈 덮인 곳엔 메기만
   if (!kinds.length) return;
+  // 나올 자리: 쫓아오는 동안 지나갈 물길(앞 LURK_AHEAD)에 점프대·끊긴 길이 없는 곳. 정한 자리 뒤에서 찾고, 없으면 앞쪽에서, 그래도 없으면 이번 판엔 안 나옴
+  const S = world.samples, N = S.length, at = 0.25 + Math.random() * 0.45;
+  const i0 = Math.max(0, S.findIndex(q => q.d >= at * world.total));
+  let startI = -1;
+  for (let i = i0; i < N * 0.78 && startI < 0; i += 3) if (lurkClear(i, LURK_AHEAD)) startI = i;
+  for (let i = Math.round(N * 0.15); i < i0 && startI < 0; i += 3) if (lurkClear(i, LURK_AHEAD)) startI = i;
+  if (startI < 0) return;
   const kind = kinds[Math.floor(Math.random() * kinds.length)], g = makeLurker(kind);
   g.visible = false; world.group.add(g); world.group.add(g.userData.shadow);
-  lurker = { kind, cfg: LURK[kind], g, phase: 'wait', at: 0.25 + Math.random() * 0.45, dist: LURK_START, t: 0, swim: 0, alpha: 0, yaw: 0 };
+  lurker = { kind, cfg: LURK[kind], g, phase: 'wait', startI, dist: LURK_START, t: 0, swim: 0, alpha: 0, yaw: 0 };
 }
-function lurkOk() {   // 지금 다가오기 시작해도 되는지: 오리 앞뒤가 평범한 물길이고, 새가 쫓아오는 중이 아닐 때
-  if (!chaseOk() || (eagle && (eagle.phase === 'chase' || eagle.phase === 'takeoff'))) return false;
+// 물속 천적이 쫓아오는 중인지 (하늘 천적과 동시에 안 나오게)
+function lurkBusy() { return !!lurker && (lurker.phase === 'stalk' || lurker.phase === 'leap' || lurker.phase === 'dive' || lurker.phase === 'sink'); }
+// 물속 그림자가 다닐 수 없는 곳 (물이 끊기거나, 물길이 아닌 곳)
+const lurkBad = q => q.gap || q.ramp || q.cliff || q.loopZone || q.rail || q.fall || q.slide || q.lift || q.pool || q.stone || q.fork || q.epi || q.jet;
+const LURK_AHEAD = 100;   // 쫓아오는 동안(최대 6.5초) 오리가 갈 거리 ≈ 25 → 이만큼 앞까지 점프대·끊긴 길이 없어야 시작
+function lurkClear(i, ahead) {
   const S = world.samples;
-  for (let i = Math.max(0, P.idx - 44); i < Math.min(S.length, P.idx + 30); i++) { const q = S[i]; if (q.fall || q.slide || q.lift || q.pool || q.stone || q.fork || q.epi) return false; }
+  if (i - 44 < 0 || i + ahead >= S.length) return false;
+  for (let k = i - 44; k <= i + ahead; k++) if (lurkBad(S[k])) return false;
   return true;
+}
+function lurkOk() {   // 지금 다가오기 시작해도 되는지: 오리 앞뒤가 평범한 물길이고, 새가 나와 있지 않을 때
+  if (!chaseOk() || (eagle && (eagle.phase === 'chase' || eagle.phase === 'takeoff' || eagle.phase === 'look' || eagle.phase === 'leave'))) return false;
+  return lurkClear(P.idx, 30);
 }
 function lurkerHit(L) {   // 💥 튀어오른 천적에게 한 대 맞음
   L.hit = true;
@@ -6479,14 +6519,16 @@ function updateLurker(dt) {
   if (L.phase === 'wait') {
     if (state !== 'playing') return;
     if (P.prog / world.total > 0.82) { L.phase = 'done'; return; }
-    if (P.prog / world.total < L.at || !lurkOk()) return;
+    if (P.idx < L.startI || !lurkOk()) return;
+    if (!lurkClear(P.idx, LURK_AHEAD * 0.7)) return;   // 늦게 시작하게 됐는데 바로 앞에 점프대가 있으면 그 뒤로 미룸
     L.phase = 'stalk'; L.t = 0; L.dist = LURK_START; L.alpha = 0; sh.visible = false;
     Sfx.lurk(); showToast(t('lurkWarn'), 1800);
   }
   if (L.phase === 'stalk' || L.phase === 'sink') {   // 🫧 물속 그림자가 오리 뒤를 따라 헤엄침
     if (L.phase === 'stalk') {
       if (state === 'falling' || state === 'respawning' || state === 'failed' || state === 'win' || state === 'outro') { L.phase = 'sink'; L.t = 0; }
-      else if (state === 'playing' && !P.air && !P.loop && !P.held && !(P.diveT > 0) && !P.cart) {
+      else if (P.air || P.loop || P.cart || S.slice(P.idx, P.idx + 16).some(lurkBad)) { L.phase = 'sink'; L.t = 0; L.quick = true; }   // 바로 앞에 점프대·끊긴 길: 물이 없는 곳까지는 못 따라옴 → 조용히 가라앉음
+      else if (state === 'playing' && !P.held && !(P.diveT > 0)) {
         const s = S[P.idx], va = P.vx * s.tx + P.vz * s.tz;
         L.t += dt;
         L.dist = clamp(L.dist - (flow + cfg.speed - va) * dt, 0, LURK_START + 3);   // 물살보다 조금 빠름 → 그냥 떠가면 따라잡힘
@@ -6501,7 +6543,7 @@ function updateLurker(dt) {
       L.alpha += (0.78 - L.alpha) * damp(2.5, dt);
     } else {   // 따돌림: 그림자가 깊이 가라앉으며 사라짐
       L.t += dt; L.dist += 1.5 * dt;
-      L.alpha = Math.max(0, L.alpha - dt * 0.8);
+      L.alpha = Math.max(0, L.alpha - dt * (L.quick ? 2.5 : 0.8));
       if (L.alpha <= 0.01) { L.phase = 'done'; sh.visible = false; return; }
     }
     if (L.phase === 'stalk' || L.phase === 'sink') {
@@ -6527,6 +6569,7 @@ function updateLurker(dt) {
       let dyaw = Math.atan2(-s.tx, -s.tz) - L.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw)); L.yaw += dyaw * damp(6, dt);   // 물길이 휘는 대로 몸을 부드럽게 돌림
       lurkOrient(sh, L.yaw + Math.sin(L.swim * 3.2 + 1) * 0.14, S, si);   // 헤엄치며 몸을 살랑 + 코너에서 기운 물 표면에 맞춰 눕힘
       sh.scale.set(len * 0.5 * (LURK_TW / 64) * (1 + Math.sin(L.swim * 6.4) * 0.04), len * (LURK_TH / 128), 1);
+      if (lurkBad(s)) L.alpha = 0;   // 그림자 자리가 물이 없는 곳(점프대 뒤 끊긴 길 등)이면 안 보이게
       sh.material.opacity = L.alpha * (0.85 + Math.sin(L.swim * 5) * 0.15);
       if (L.phase === 'stalk' && Math.random() < dt * 6) spawnDrop(sh.position.x + (Math.random() - 0.5) * 0.4, s.y + 0.05, sh.position.z + (Math.random() - 0.5) * 0.4, 0, 0.5 + Math.random() * 0.4, 0, 0.035, 0.3);   // 보글보글 거품
       if (L.phase === 'stalk' && Math.random() < dt * 1.5) spawnRipple(sh.position.x, s.y, sh.position.z, 0.8);
